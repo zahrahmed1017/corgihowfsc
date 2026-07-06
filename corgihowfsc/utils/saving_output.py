@@ -16,7 +16,7 @@ import logging
 log = logging.getLogger(__name__)
 
 markers = ['o','p','d','+','^']
-tab20c = cm.get_cmap('tab20c')
+tab20c = matplotlib.colormaps['tab20c']
 # colours = [tab20c(i) for i in range(20)]
 colours = [tab20c(i * 4) for i in range(5)]  # 5 groups
 
