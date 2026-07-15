@@ -333,7 +333,8 @@ def nulling_gitl(cstrat, estimator, probes, normalization_strategy, imager, cfg,
         pass
 
     for iteration in range(1, niter+1): # var is number of next iteration
-
+        
+        t_iter_init = time.time()
         t0 = time.time()
         if isprof:
             pr.enable()
@@ -551,6 +552,10 @@ def nulling_gitl(cstrat, estimator, probes, normalization_strategy, imager, cfg,
                 framelist[fr[j]] *= np.nan
                 pass
             pass
+
+        t_iter_fin = time.time()
+        log.info("Total iteration time for iteration %d: %s seconds", iteration, t_iter_fin-t_iter_init)
+
 
     # technically new nrow, ncol, croplist too, but these don't actually
     # change (parameters are not updated)
