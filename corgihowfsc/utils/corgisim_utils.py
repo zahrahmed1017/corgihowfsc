@@ -9,6 +9,7 @@ _MANAGER_KEYS = frozenset({
     'Vmag',
     'sptype',
     'ref_flag',
+    'point_sources'
 })
 
 CGI_TO_CORGI_MAPPING = {
@@ -43,6 +44,21 @@ def _extract_host_properties_from_hconf(hconf):
     except (AttributeError, KeyError) as e:
         raise ValueError(f"hconf missing required star configuration: {e}")
 
+def _build_point_source_info(point_sources_cfg):
+    """ Convert corgi_overrides['point_sources'] into the point_source_info that is expected by corgisim.scene.Scene
+    
+        Each entry in point_sources_cfg should have:
+            - vmag: Vega magnitude 
+            - posoition_x_mas: dRA offset from host star in mas
+            - poisition_y_mas: dDec offset from host star in mas
+    """
+    return [{
+        'Vmag': src['vmag'], 
+        'magtype': 'vegamag', 
+        'position_x': src['position_x_mas'], 
+        'position_y': src['position_y_mas']
+        } for src in point_sources_cfg]
+    
 # Helper function to map wavelength to corgisim bandpass
 def map_wavelength_to_corgisim_bandpass(wavelength_m, tolerance=5e-9):
     """

@@ -77,3 +77,9 @@ models:
       # Parameters forwarded to GitlImage initialization
       is_noise_free: false
       oversampling_factor: 3 # always odd number
+      # Adding off-axis companions that will be injected into every GITL frame
+      # vmag = Vega magnitude, position_x_mas/position_y_mas are the dRA and dDEC offsets from the host star in mas
+      point_sources:
+        - vmag: 5
+        - position_x_mas: 720
+        - position_y_mas: 0.0

@@ -9,7 +9,8 @@ from corgihowfsc.utils.corgisim_utils import (
     CGI_TO_CORGI_MAPPING,
     SUPPORTED_CGI_MODES,
     map_wavelength_to_corgisim_bandpass, 
-    _MANAGER_KEYS
+    _MANAGER_KEYS,
+    _build_point_source_info
     )
 
 class CorgisimManager:
@@ -108,6 +109,7 @@ class CorgisimManager:
         self.Vmag = self.corgi_overrides.get('Vmag', self.host_star_properties['Vmag'])
         self.sptype = self.corgi_overrides.get('sptype', self.host_star_properties['spectral_type'])
         self.ref_flag = self.corgi_overrides.get('ref_flag', self.host_star_properties['ref_flag'])
+        self.point_sources = _build_point_source_info(self.corgi_overrides.get('point_sources', []))
         self._mode = 'excam'  # default camera mode
         self.k_gain = 8.7 # photo e-/DN, calibrated in TVAC
 
@@ -258,6 +260,9 @@ class CorgisimManager:
         is active, returns the noiseless host star image directly. Otherwise, applies detector effects and returns the
         mean of `nframes` bias- and dark-subtracted, gain-corrected frames.
 
+        If any off-axis companions are configured via corgi_overrides['point_sources'], they are propagated
+        through the same optical system and combined with the host star image. 
+
         Parameters
         ----------
         dm1v : ndarray
@@ -292,8 +297,15 @@ class CorgisimManager:
 
         sim_scene = optics.get_host_star_psf(self.base_scene)
 
+        if self.point_sources:
+            companion_scene = scene.Scene(self.host_star_properties, self.point_sources)
+            sim_scene = optics.inject_point_sources(companion_scene, sim_scene)
+
         if self.is_noise_free:
-            return sim_scene.host_star_image.data
+            image = sim_scene.host_star_image.data
+            if sim_scene.point_source_image is not None:
+                image = image + sim_scene.point_source_image.data
+            return image
         else:
             # generate detector image
             emccd_dict = {'em_gain': gain, 'bias':bias, 'cr_rate': 0}
