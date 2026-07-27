@@ -1,4 +1,4 @@
-active_model: "cgi-howfsc" # choose from "cgi-howfsc" or "corgihowfsc". This will determine which imager model is used and which settings are applied to the imager initialization.
+active_model: "corgihowfsc" # choose from "cgi-howfsc" or "corgihowfsc". This will determine which imager model is used and which settings are applied to the imager initialization.
 
 runtime:
   # PROPER processes inside each image worker.
@@ -6,11 +6,11 @@ runtime:
   num_proper_process: 5 
 
   # Local only: Jacobian worker processes. Ignored in MPI mode.
-  num_jac_process: 6 
+  num_jac_process: 15 
 
   # Local: image worker processes; null means serial image generation.
   # MPI: active worker ranks; usually total MPI ranks minus 1 manager.
-  num_imager_worker: null
+  num_imager_worker: 3
 
   # false: local run; true: MPI manager-worker run.
   use_mpi: false 
@@ -22,8 +22,8 @@ sim_settings:
   loop_framework: "corgi-howfsc" # do not modify 
   precomp: "precomp_jacs_always" # options: 'precomp_jacs_always', 'precomp_all_once', 'load_all' (only if defjacpath is not None)
   output_every_iter: true # whether to save the output frames at every iteration (true) or after all iterations are done (false)
-  niter: 3 # number of iterations to run
-  mode: "nfov_band1" # options: see models
+  niter: 10 # number of iterations to run
+  mode: "wfov_band4" # options: see models
   dark_hole: "360deg"  # options: see models
   probe_shape: "default" 
 
@@ -39,7 +39,7 @@ path_overrides:
   # Leave as null to use the mode-derived path.
   # Can also override defjacpath and dmstartmap_filenames by providing full paths
   cfgfile: null
-  cstratfile: null
+  cstratfile: "C:/Users/zahmed1/Documents/corgihowfsc/corgihowfsc/model/wfov_band4/wfov_band4_360deg/cstrat_wfov_band4_copyNfovBand1.yaml"
   hconffile: null
 
 crop:
@@ -52,14 +52,16 @@ models:
     backend_type: "cgi-howfsc"
     normalization_type: "eetc"
     estimator: "default" # options are "perfect" and "default"; perfect estimator uses the model e-field for estimation, while default estimator uses the standard pairwise probing method
-    starting_contrast: 6e-10 # starting contrast value for dmstartmap_filenames; not actually used in compact model
+    starting_contrast: 2e-4 # starting contrast value for dmstartmap_filenames; not actually used in compact model
     dmstartmap_filenames: 
     # Initial DM shape. Provide either:
     # - two filenames relative to modelpath, or
     # - two absolute paths.
     # Mixed absolute/relative entries are not supported.
-      - "gitl_start_compact_dm1.fits"  # can provide full path including filename or just a filename if the file is located in the modelpath
-      - "gitl_start_compact_dm2.fits"  # can provide full path including filename or just a filename if the file is located in the modelpath
+      #- "C:/Users/zahmed1/Documents/corgihowfsc/corgihowfsc/model/wfov_band4/any/dmabs_init_dm1.fits"  # can provide full path including filename or just a filename if the file is located in the modelpath
+      #- "C:/Users/zahmed1/Documents/corgihowfsc/corgihowfsc/model/wfov_band4/any/dmabs_init_dm2.fits"  # can provide full path including filename or just a filename if the file is located in the modelpath
+      - "../any/dmabs_init_dm1.fits"  # can provide full path including filename or just a filename if the file is located in the modelpath
+      - "../any/dmabs_init_dm2.fits"  # can provide full path including filename or just a filename if the file is located in the modelpath
     lrow: 436 # Do not modify
     lcol: 436 # Do not modify
 
@@ -75,11 +77,11 @@ models:
     lcol: 0 # Do not modify
     corgi_overrides: 
       # Parameters forwarded to GitlImage initialization
-      is_noise_free: false
+      is_noise_free: true
       oversampling_factor: 3 # always odd number
       # Adding off-axis companions that will be injected into every GITL frame
       # vmag = Vega magnitude, position_x_mas/position_y_mas are the dRA and dDEC offsets from the host star in mas
       point_sources:
-        - vmag: 5
-        - position_x_mas: 720
-        - position_y_mas: 0.0
+        - vmag: 2.25
+          position_x_mas: 800
+          position_y_mas: 0.0
