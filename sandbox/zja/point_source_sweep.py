@@ -44,6 +44,9 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 import numpy as np
 from PIL import Image
+from matplotlib.animation import FuncAnimation, PillowWriter
+from datetime import datetime
+from pathlib import Path
 
 import roman_preflight_proper
 roman_preflight_proper.copy_here()
@@ -60,7 +63,8 @@ from corgihowfsc.utils.corgisim_utils import calculate_mas_per_lamD
 
 HOWFSCPATH = os.path.dirname(os.path.abspath(corgihowfsc.__file__))
 DEFAULT_PARAM_FILE = os.path.join(HOWFSCPATH, 'scripts', 'default_param.yml')
-DEFAULT_OUT_DIR = os.path.dirname(os.path.abspath(__file__))
+# DEFAULT_OUT_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_OUT_DIR = "C:/Users/zahmed1/corgiloop_data/off_axis_star_testing"
 
 def fov_range_lamd(cor_mapped):
     """Mirror corgisim/instrument.py's inject_point_sources FOV_range lookup
@@ -135,7 +139,8 @@ def shared_log_range(imgs, floor_frac=1e-6):
     """Common (vmin, vmax) for LogNorm across multiple images, so they share
     one log color scale instead of each auto-scaling to its own peak."""
     vmax = max(np.nanmax(img) for img in imgs)
-    vmin = max(vmax * floor_frac, 1e-30)
+    # vmin = max(vmax * floor_frac, 1e-30)
+    vmin = min(np.nanmin(img) for img in imgs)
     return vmin, vmax
 
 
@@ -148,9 +153,12 @@ def build_normalizer(cfg, hconf, mode, host_overrides, dm1v, dm2v, lind, exptime
     return norm, peakflux
 
 
-def make_three_panel(host_img, companion_img, combined_img, out_path, title):
+def make_three_panel(host_img, companion_img, combined_img, out_path, title, ppl):
     imgs = [host_img, companion_img, combined_img]
     vmin, vmax = shared_log_range(imgs)
+
+    ny, nx = host_img.shape
+    extent = [-(nx // 2) / ppl, (nx // 2) / ppl, -(ny // 2) / ppl, (ny // 2) / ppl]  # lambda/D
 
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
     for ax, img, panel_title in zip(
@@ -159,9 +167,13 @@ def make_three_panel(host_img, companion_img, combined_img, out_path, title):
         ['Host star only', 'Off-axis companion only', 'Combined'],
     ):
         im = ax.imshow(np.clip(img, vmin, None), origin='lower', cmap='inferno',
-                        norm=LogNorm(vmin=vmin, vmax=vmax))
+                        norm=LogNorm(vmin=vmin, vmax=vmax), extent=extent)
         ax.set_title(panel_title)
-        fig.colorbar(im, ax=ax, fraction=0.046, label='Normalized intensity')
+        ax.set_xlabel(r"x [$\lambda/D$]")
+        if panel_title == 'Host star only':
+            ax.set_ylabel(r"y [$\lambda/D$]")
+        if panel_title == 'Combined':
+            fig.colorbar(im, ax=ax, fraction=0.046, label='Normalized intensity')   
     fig.suptitle(title)
     fig.tight_layout()
     fig.savefig(out_path, dpi=130)
@@ -179,8 +191,11 @@ def save_log_frame(img, path, vmin, vmax, title):
     fig.savefig(path, dpi=110)
     plt.close(fig)
 
+    data_name = title + '.npy'
+    np.save(data_name, clip_positive(img))
 
-def make_gif(frame_paths, out_path, duration_ms=250):
+
+def make_gif(frame_paths, out_path, duration_ms=800):
     frames = [Image.open(p).convert('RGB') for p in frame_paths]
     frames[0].save(out_path, save_all=True, append_images=frames[1:],
                     duration=duration_ms, loop=0)
@@ -201,9 +216,9 @@ def plot_contrast(x_mas, c_combined, c_companion, host_contrast, mas_per_lamd,
     ax.axvline(owa_mas, color='red', linestyle='--', alpha=0.6,
                label=f'{mode_label} OWA ({owa_lamd} lam/D)')
 
-    ax.set_xlabel('companion x separation [mas]')
-    ax.set_ylabel('mean contrast in dark-hole mask')
-    ax.legend(fontsize=8)
+    ax.set_xlabel('Binary Separation [mas]')
+    ax.set_ylabel('Normalized Intensity')
+    ax.legend(fontsize=12)
     fig.tight_layout()
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
@@ -237,7 +252,10 @@ def run_single(cfg, hconf, mode, dm1v, dm2v, base_overrides, lind, exptime, out_
     title = (f"{mode}, companion vmag={src['vmag']} at "
              f"(dx={src['position_x_mas']}, dy={src['position_y_mas']}) mas")
     out_path = os.path.join(out_dir, 'point_source_three_panel.png')
-    make_three_panel(host_ni, companion_ni, combined_ni, out_path, title)
+
+    ppl_lam0 = 3.14 # hardcoding for now but should make this better
+
+    make_three_panel(host_ni, companion_ni, combined_ni, out_path, title, ppl_lam0)
 
 
 def run_sweep(cfg, hconf, mode, dm1v, dm2v, base_overrides, lind, exptime, out_dir,
@@ -271,6 +289,9 @@ def run_sweep(cfg, hconf, mode, dm1v, dm2v, base_overrides, lind, exptime, out_d
     x_mas, c_combined, c_companion = [], [], []
     vmin = vmax = None
 
+    frames_dir = os.path.join(out_dir, "dark_hole_frames")
+    os.makedir(frames_dir, exist_ok=True)
+
     for i, x in enumerate(x_positions):
         overrides = dict(base_overrides)
         overrides['point_sources'] = [{
@@ -283,7 +304,7 @@ def run_sweep(cfg, hconf, mode, dm1v, dm2v, base_overrides, lind, exptime, out_d
         combined_ni = norm.normalize(combined_img, peakflux, exptime)
         companion_ni = norm.normalize(companion_img, peakflux, exptime)
 
-        contrast_combined = np.nanmean(combined_ni[dh_mask])
+        contrast_combined  = np.nanmean(combined_ni[dh_mask])
         contrast_companion = np.nanmean(companion_ni[dh_mask])
 
         x_mas.append(x)
@@ -297,7 +318,7 @@ def run_sweep(cfg, hconf, mode, dm1v, dm2v, base_overrides, lind, exptime, out_d
             vmin, vmax = np.nanmin(frame_clipped), np.nanmax(frame_clipped)
 
         lamd = x / mas_per_lamd
-        frame_path = os.path.join(out_dir, f'sweep_frame_{i:03d}_x{int(round(x))}mas.png')
+        frame_path = os.path.join(frames_dir, f'sweep_frame_{i:03d}_x{int(round(x))}mas.png')
         save_log_frame(combined_ni, frame_path, vmin, vmax,
                         title=f'x = {x:.0f} mas ({lamd:.1f} lam/D)')
         frame_paths.append(frame_path)
@@ -310,6 +331,9 @@ def run_sweep(cfg, hconf, mode, dm1v, dm2v, base_overrides, lind, exptime, out_d
     plot_contrast(np.array(x_mas), np.array(c_combined), np.array(c_companion),
                   host_contrast, mas_per_lamd, iwa_lamd, owa_lamd, mgr_host.cor_mapped,
                   os.path.join(out_dir, 'contrast_vs_separation.png'))
+    # Save contrast info for plot
+    np.savez("contrast_vs_xmas.npz", x_mas=x_mas, mas_per_lamd=mas_per_lamd, c_combined=np.array(c_combined), 
+             c_companion=np.array(c_companion), host_contrast=host_contrast, iwa_lambd=iwa_lamd, owa_lamd=owa_lamd)
 
 
 def main():
@@ -318,7 +342,7 @@ def main():
     ap.add_argument('--param_file', default=DEFAULT_PARAM_FILE,
                     help='Path to default_param.yml (default: corgihowfsc/scripts/default_param.yml)')
     ap.add_argument('--out-dir', default=DEFAULT_OUT_DIR,
-                    help='Where to save figures/frames/gif (default: next to this script)')
+                    help='Where to save figures/frames/gif')
     ap.add_argument('--sweep', action='store_true',
                     help='Sweep the companion x position instead of using a single frame')
     ap.add_argument('--x-start', type=float, default=400.0, help='Sweep start, mas')
@@ -332,10 +356,12 @@ def main():
     ap.add_argument('--force-noise-free', action='store_true',
                     help="Override is_noise_free=True for this run only (doesn't touch "
                          "default_param.yml). Useful while the noisy detector path is "
-                         "broken -- it currently drowns the PSF in detector noise.")
+                         "broken")
     args = ap.parse_args()
 
-    os.makedirs(args.out_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    folder_path = os.path.join(args.out_dir, f"{timestamp}_offAxisSweep")
+    os.makedirs(folder_path, exist_ok=True)
 
     cfg, hconf, mode, dm1v, dm2v, base_overrides = build_inputs(args.param_file)
     if args.force_noise_free:
@@ -343,10 +369,10 @@ def main():
 
     if args.sweep:
         run_sweep(cfg, hconf, mode, dm1v, dm2v, base_overrides, args.lind, args.exptime,
-                  args.out_dir, args.x_start, args.x_stop, args.x_step)
+                  folder_path, args.x_start, args.x_stop, args.x_step)
     else:
         run_single(cfg, hconf, mode, dm1v, dm2v, base_overrides, args.lind, args.exptime,
-                  args.out_dir)
+                  folder_path)
 
 
 if __name__ == '__main__':
