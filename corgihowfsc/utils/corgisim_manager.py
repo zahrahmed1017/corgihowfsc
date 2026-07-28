@@ -110,6 +110,9 @@ class CorgisimManager:
         self.sptype = self.corgi_overrides.get('sptype', self.host_star_properties['spectral_type'])
         self.ref_flag = self.corgi_overrides.get('ref_flag', self.host_star_properties['ref_flag'])
         self.point_sources = _build_point_source_info(self.corgi_overrides.get('point_sources', []))
+        # Optional override for the number of monochromatic wavelengths sampled
+        # within each subband. None => use cgisim's default (from cgisim_bandpasses.txt).
+        self.nlam = self.corgi_overrides.get('nlam', None)
         self._mode = 'excam'  # default camera mode
         self.k_gain = 8.7 # photo e-/DN, calibrated in TVAC
 
@@ -135,6 +138,32 @@ class CorgisimManager:
         forwarded directly to CorgiOptics as optics_keywords.
         """
         return {k: v for k, v in self.corgi_overrides.items() if k not in _MANAGER_KEYS}
+
+    def _apply_nlam_override(self, optics):
+        """
+        Override the number of monochromatic wavelengths sampled within a subband.
+
+        CorgiOptics sets ``optics.nlam`` and ``optics.lam_um`` at construction time
+        from cgisim's bandpass table. For the coronagraph (excam) modes used here,
+        ``lam_um`` is a linspace spanning the subband edges, so re-sampling between
+        the existing endpoints with a new count preserves the band exactly while
+        increasing the spectral resolution of the propagated PSF.
+
+        This does nothing if no override was requested (``self.nlam is None``).
+
+        Parameters
+        ----------
+        optics : corgisim.instrument.CorgiOptics
+            Freshly constructed optics object to modify in place.
+        """
+        if self.nlam is None:
+            return
+
+        if int(self.nlam) < 2:
+            raise ValueError(f"nlam override must be >= 2, got {self.nlam}")
+
+        optics.lam_um = np.linspace(optics.lam_um[0], optics.lam_um[-1], int(self.nlam))
+        optics.nlam = int(self.nlam)
 
     def create_optics(self, dm1v, dm2v, lind):
         bandpass_recipe = self._get_bandpass_recipe(lind)
@@ -167,6 +196,8 @@ class CorgisimManager:
             optics_keywords=optics_keywords,
             if_quiet=True
         )
+
+        self._apply_nlam_override(optics)
 
         return optics
 
@@ -229,6 +260,8 @@ class CorgisimManager:
             optics_keywords=optics_keywords,
             if_quiet=True
         )
+
+        self._apply_nlam_override(optics)
 
         sim_scene = optics.get_host_star_psf(self.base_scene)
 

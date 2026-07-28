@@ -9,7 +9,8 @@ _MANAGER_KEYS = frozenset({
     'Vmag',
     'sptype',
     'ref_flag',
-    'point_sources'
+    'point_sources',
+    'nlam'
 })
 
 CGI_TO_CORGI_MAPPING = {
