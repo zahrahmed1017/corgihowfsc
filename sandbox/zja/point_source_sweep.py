@@ -160,7 +160,7 @@ def make_three_panel(host_img, companion_img, combined_img, out_path, title, ppl
     ny, nx = host_img.shape
     extent = [-(nx // 2) / ppl, (nx // 2) / ppl, -(ny // 2) / ppl, (ny // 2) / ppl]  # lambda/D
 
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    fig, axes = plt.subplots(1, 3, figsize=(15, 6))
     for ax, img, panel_title in zip(
         axes,
         imgs,
@@ -168,12 +168,17 @@ def make_three_panel(host_img, companion_img, combined_img, out_path, title, ppl
     ):
         im = ax.imshow(np.clip(img, vmin, None), origin='lower', cmap='inferno',
                         norm=LogNorm(vmin=vmin, vmax=vmax), extent=extent)
-        ax.set_title(panel_title)
-        ax.set_xlabel(r"x [$\lambda/D$]")
+        ax.set_title(panel_title, fontsize=16)
+        ax.set_xlabel(r'x [$\lambda/D$]', fontsize=16)
+        ax.tick_params(axis='x', labelsize=14)
+        ax.tick_params(axis='y', labelsize=14)
         if panel_title == 'Host star only':
-            ax.set_ylabel(r"y [$\lambda/D$]")
-        if panel_title == 'Combined':
-            fig.colorbar(im, ax=ax, fraction=0.046, label='Normalized intensity')   
+            ax.set_ylabel(r"y [$\lambda/D$]", fontsize=16)
+        # if panel_title == 'Combined':
+        #     fig.colorbar(im, ax=ax, fraction=0.046, label='Normalized intensity').ax.tick_params(labelsize=14)   
+    cbar = fig.colorbar(im, ax=ax, fraction=0.046, label='Normalized intensity')
+    cbar.ax.tick_params(labelsize=14)  
+    cbar.set_label("Normalized Intensity", fontsize=14)
     fig.suptitle(title)
     fig.tight_layout()
     fig.savefig(out_path, dpi=130)
@@ -181,7 +186,7 @@ def make_three_panel(host_img, companion_img, combined_img, out_path, title, ppl
     print(f'Saved {out_path}')
 
 
-def save_log_frame(img, path, vmin, vmax, title):
+def save_log_frame(img, path, out_dir, frame_name, vmin, vmax, title):
     fig, ax = plt.subplots(figsize=(5, 5))
     im = ax.imshow(clip_positive(img), origin='lower', cmap='inferno',
                     norm=LogNorm(vmin=vmin, vmax=vmax))
@@ -191,8 +196,8 @@ def save_log_frame(img, path, vmin, vmax, title):
     fig.savefig(path, dpi=110)
     plt.close(fig)
 
-    data_name = title + '.npy'
-    np.save(data_name, clip_positive(img))
+    data_name = frame_name + '.npy'
+    np.save(os.path.join(out_dir,data_name), clip_positive(img))
 
 
 def make_gif(frame_paths, out_path, duration_ms=800):
@@ -204,20 +209,21 @@ def make_gif(frame_paths, out_path, duration_ms=800):
 
 def plot_contrast(x_mas, c_combined, c_companion, host_contrast, mas_per_lamd,
                    iwa_lamd, owa_lamd, mode_label, out_path):
-    fig, ax = plt.subplots(figsize=(7, 5))
-    ax.semilogy(x_mas, c_combined, 'o-', label='host + companion (dark-hole mean)')
-    ax.semilogy(x_mas, c_companion, 's--', label='companion contribution only')
+    fig, ax = plt.subplots(figsize=(7, 6))
+    x_lamd = x_mas / mas_per_lamd
+    ax.semilogy(x_lamd, c_combined, 'o-', label='host + companion (dark-hole mean)')
+    ax.semilogy(x_lamd, c_companion, 's--', label='companion contribution only')
     ax.axhline(host_contrast, color='gray', linestyle=':', label='host-only baseline')
 
-    iwa_mas = iwa_lamd * mas_per_lamd
-    owa_mas = owa_lamd * mas_per_lamd
-    ax.axvline(iwa_mas, color='orange', linestyle='--', alpha=0.6,
-               label=f'{mode_label} IWA ({iwa_lamd} lam/D)')
-    ax.axvline(owa_mas, color='red', linestyle='--', alpha=0.6,
-               label=f'{mode_label} OWA ({owa_lamd} lam/D)')
+    ax.axvline(iwa_lamd, color='orange', linestyle='--', alpha=0.6,
+               label=r'{mode_label} IWA ({iwa_lamd} $\lambda/D$)')
+    ax.axvline(owa_lamd, color='red', linestyle='--', alpha=0.6,
+               label=r'{mode_label} OWA ({owa_lamd} $\lambda/D$)')
 
-    ax.set_xlabel('Binary Separation [mas]')
-    ax.set_ylabel('Normalized Intensity')
+    ax.tick_params(axis='x', labelsize=14)
+    ax.tick_params(axis='y', labelsize=14)
+    ax.set_xlabel(r'Binary Separation [$\lambda/D$]', fontsize=16)
+    ax.set_ylabel('Normalized Intensity', fontsize=16)
     ax.legend(fontsize=12)
     fig.tight_layout()
     fig.savefig(out_path, dpi=150)
@@ -290,7 +296,7 @@ def run_sweep(cfg, hconf, mode, dm1v, dm2v, base_overrides, lind, exptime, out_d
     vmin = vmax = None
 
     frames_dir = os.path.join(out_dir, "dark_hole_frames")
-    os.makedir(frames_dir, exist_ok=True)
+    os.makedirs(frames_dir, exist_ok=True)
 
     for i, x in enumerate(x_positions):
         overrides = dict(base_overrides)
@@ -318,8 +324,9 @@ def run_sweep(cfg, hconf, mode, dm1v, dm2v, base_overrides, lind, exptime, out_d
             vmin, vmax = np.nanmin(frame_clipped), np.nanmax(frame_clipped)
 
         lamd = x / mas_per_lamd
-        frame_path = os.path.join(frames_dir, f'sweep_frame_{i:03d}_x{int(round(x))}mas.png')
-        save_log_frame(combined_ni, frame_path, vmin, vmax,
+        save_frame_name = f'sweep_frame_{i:03d}_x{int(round(x))}mas'
+        frame_path = os.path.join(frames_dir, save_frame_name + '.png')
+        save_log_frame(combined_ni, frame_path, out_dir, save_frame_name, vmin, vmax,
                         title=f'x = {x:.0f} mas ({lamd:.1f} lam/D)')
         frame_paths.append(frame_path)
         print(f'[{i+1}/{len(x_positions)}] x={x:.0f} mas: '
@@ -345,7 +352,7 @@ def main():
                     help='Where to save figures/frames/gif')
     ap.add_argument('--sweep', action='store_true',
                     help='Sweep the companion x position instead of using a single frame')
-    ap.add_argument('--x-start', type=float, default=400.0, help='Sweep start, mas')
+    ap.add_argument('--x-start', type=float, default=415.0, help='Sweep start, mas')
     ap.add_argument('--x-stop', type=float, default=10000.0, help='Sweep stop, mas')
     ap.add_argument('--x-step', type=float, default=500.0, help='Sweep step, mas')
     ap.add_argument('--lind', type=int, default=0, help='Wavelength/subband index')
