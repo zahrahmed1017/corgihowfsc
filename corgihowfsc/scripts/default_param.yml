@@ -80,14 +80,12 @@ models:
       is_noise_free: true
       oversampling_factor: 3 # always odd number
       # Number of monochromatic wavelengths sampled within each subband.
-      # null => use cgisim default (from cgisim_bandpasses.txt, typically 5).
-      # Increasing this raises spectral fidelity of the full-model PSF but scales
-      # image-generation time ~linearly. Only unrestricted for SPC modes
-      # (spc-wide/band4, spc-spec); HLC/Band 1 is limited to precomputed FPM wavelengths.
+      # null -> use cgisim default (from cgisim_bandpasses.txt).
+      # Only works for SPC modes (spc-wide/band4, spc-spec); HLC/Band 1 is limited to precomputed FPM wavelengths.
       nlam: null
       # Adding off-axis companions that will be injected into every GITL frame
       # vmag = Vega magnitude, position_x_mas/position_y_mas are the dRA and dDEC offsets from the host star in mas
       point_sources:
         - vmag: 2.25
-          position_x_mas: 800
+          position_x_mas: 3000
           position_y_mas: 0.0

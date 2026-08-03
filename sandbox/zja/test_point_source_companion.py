@@ -47,7 +47,7 @@ DARK_HOLE = '360deg'
 
 # The companion to inject. Matches the schema _build_point_source_info expects.
 POINT_SOURCES = [
-    {'vmag': 5.0, 'position_x_mas': 720.0, 'position_y_mas': 0.0},
+    {'vmag': 2.25, 'position_x_mas': 700.0, 'position_y_mas': 0.0},
 ]
 
 # Keep this fast + clean: noise-free means get_image returns
@@ -65,8 +65,8 @@ OUTPNG = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 
 
 def build_inputs():
-    """Load cfg / cstrat / hconf and the starting DM maps, exactly as the run
-    script does, but without any Jacobian / loop machinery."""
+    """Load cfg / cstrat / hconf and the starting DM maps, exactly as the run_corgisim_nulling_gitl
+    script does, but without any Jacobian /etxtra stuff that slows the loop down."""
     howfscpath = os.path.dirname(os.path.abspath(corgihowfsc.__file__))
 
     args = get_args(
