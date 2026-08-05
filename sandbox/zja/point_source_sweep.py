@@ -37,6 +37,7 @@ Run
 
 import argparse
 import os
+import shutil
 
 import matplotlib
 matplotlib.use('Agg')
@@ -145,7 +146,7 @@ def shared_log_range(imgs, floor_frac=1e-6):
 
 
 def build_normalizer(cfg, hconf, mode, host_overrides, dm1v, dm2v, lind, exptime):
-    """Peak flux (unocculted host star) for NI normalization -- reuse the same
+    """Peak flux (unocculted host star) for NI normalization (reuse the same
     convention the real loop uses for corgisim (CorgiNormalizationOnAxis)."""
     norm = CorgiNormalizationOnAxis(cfg, None, hconf, cor=mode,
                                      corgi_overrides=host_overrides, exptime_norm=exptime)
@@ -153,7 +154,7 @@ def build_normalizer(cfg, hconf, mode, host_overrides, dm1v, dm2v, lind, exptime
     return norm, peakflux
 
 
-def make_three_panel(host_img, companion_img, combined_img, out_path, title, ppl):
+def make_three_panel(host_img, companion_img, combined_img, out_path, title, ppl, host_contrast, contrast_companion, contrast_combined):
     imgs = [host_img, companion_img, combined_img]
     vmin, vmax = shared_log_range(imgs)
 
@@ -164,7 +165,8 @@ def make_three_panel(host_img, companion_img, combined_img, out_path, title, ppl
     for ax, img, panel_title in zip(
         axes,
         imgs,
-        ['Host star only', 'Off-axis companion only', 'Combined'],
+        #['Host star only', 'Off-axis companion only', 'Combined'],
+        [f'Host star only \n Avg Dark Hole NI: {host_contrast:.2e}', f'Off-axis companion only \n Avg Dark Hole NI: {contrast_companion:.2e}', f'Combined \n Avg Dark Hole NI: {contrast_combined:.2e}'],
     ):
         im = ax.imshow(np.clip(img, vmin, None), origin='lower', cmap='inferno',
                         norm=LogNorm(vmin=vmin, vmax=vmax), extent=extent)
@@ -172,7 +174,7 @@ def make_three_panel(host_img, companion_img, combined_img, out_path, title, ppl
         ax.set_xlabel(r'x [$\lambda/D$]', fontsize=16)
         ax.tick_params(axis='x', labelsize=14)
         ax.tick_params(axis='y', labelsize=14)
-        if panel_title == 'Host star only':
+        if 'Host star only' in panel_title:
             ax.set_ylabel(r"y [$\lambda/D$]", fontsize=16)
         # if panel_title == 'Combined':
         #     fig.colorbar(im, ax=ax, fraction=0.046, label='Normalized intensity').ax.tick_params(labelsize=14)   
@@ -216,9 +218,9 @@ def plot_contrast(x_mas, c_combined, c_companion, host_contrast, mas_per_lamd,
     ax.axhline(host_contrast, color='gray', linestyle=':', label='host-only baseline')
 
     ax.axvline(iwa_lamd, color='orange', linestyle='--', alpha=0.6,
-               label=r'{mode_label} IWA ({iwa_lamd} $\lambda/D$)')
+               label=fr'{mode_label} IWA ({iwa_lamd} $\lambda/D$)')
     ax.axvline(owa_lamd, color='red', linestyle='--', alpha=0.6,
-               label=r'{mode_label} OWA ({owa_lamd} $\lambda/D$)')
+               label=fr'{mode_label} OWA ({owa_lamd} $\lambda/D$)')
 
     ax.tick_params(axis='x', labelsize=14)
     ax.tick_params(axis='y', labelsize=14)
@@ -254,6 +256,12 @@ def run_single(cfg, hconf, mode, dm1v, dm2v, base_overrides, lind, exptime, out_
     combined_ni = norm.normalize(combined_img, peakflux, exptime)
     companion_ni = norm.normalize(companion_img, peakflux, exptime)
 
+    # Save dark hole contrasts:
+    dh_mask = insertinto(cfg.sl_list[lind].dh.e, host_img.shape).astype(bool)
+    host_contrast = np.nanmean(host_ni[dh_mask])
+    contrast_combined  = np.nanmean(combined_ni[dh_mask])
+    contrast_companion = np.nanmean(companion_ni[dh_mask])
+
     src = point_sources[0]
     title = (f"{mode}, companion vmag={src['vmag']} at "
              f"(dx={src['position_x_mas']}, dy={src['position_y_mas']}) mas")
@@ -261,7 +269,14 @@ def run_single(cfg, hconf, mode, dm1v, dm2v, base_overrides, lind, exptime, out_
 
     ppl_lam0 = 3.14 # hardcoding for now but should make this better
 
-    make_three_panel(host_ni, companion_ni, combined_ni, out_path, title, ppl_lam0)
+    make_three_panel(host_ni, companion_ni, combined_ni, out_path, title, ppl_lam0,
+                     host_contrast, contrast_companion, contrast_combined)
+
+    contrast_out = os.path.join(out_dir, 'component_ni.txt')
+    with open(contrast_out, "w") as file:
+        file.write(f"host NI: {host_contrast}\n")
+        file.write(f"companion NI: {contrast_companion}\n")
+        file.write(f"combined NI: {contrast_combined}\n")
 
 
 def run_sweep(cfg, hconf, mode, dm1v, dm2v, base_overrides, lind, exptime, out_dir,
@@ -332,17 +347,16 @@ def run_sweep(cfg, hconf, mode, dm1v, dm2v, base_overrides, lind, exptime, out_d
         print(f'[{i+1}/{len(x_positions)}] x={x:.0f} mas: '
               f'contrast(combined)={contrast_combined:.3e}, '
               f'contrast(companion only)={contrast_companion:.3e}')
+    # Save contrast info for plot
+    np.savez(os.path.join(out_dir, "contrast_vs_xmas.npz"), x_mas=x_mas, mas_per_lamd=mas_per_lamd, c_combined=np.array(c_combined), 
+                c_companion=np.array(c_companion), host_contrast=host_contrast, iwa_lambd=iwa_lamd, owa_lamd=owa_lamd)
 
     make_gif(frame_paths, os.path.join(out_dir, 'companion_sweep.gif'))
     iwa_lamd, owa_lamd = fov_range_lamd(mgr_host.cor_mapped)
     plot_contrast(np.array(x_mas), np.array(c_combined), np.array(c_companion),
                   host_contrast, mas_per_lamd, iwa_lamd, owa_lamd, mgr_host.cor_mapped,
                   os.path.join(out_dir, 'contrast_vs_separation.png'))
-    # Save contrast info for plot
-    np.savez("contrast_vs_xmas.npz", x_mas=x_mas, mas_per_lamd=mas_per_lamd, c_combined=np.array(c_combined), 
-             c_companion=np.array(c_companion), host_contrast=host_contrast, iwa_lambd=iwa_lamd, owa_lamd=owa_lamd)
-
-
+    
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                   formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -369,6 +383,13 @@ def main():
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     folder_path = os.path.join(args.out_dir, f"{timestamp}_offAxisSweep")
     os.makedirs(folder_path, exist_ok=True)
+
+    # Save a copy of the param file used for this run, so the output folder is a
+    # self-contained record of the parameters. Keep the original filename.
+    param_copy = os.path.join(folder_path,
+                              f"params_used_{os.path.basename(args.param_file)}")
+    shutil.copy2(args.param_file, param_copy)
+    print(f"Saved parameter file to {param_copy}")
 
     cfg, hconf, mode, dm1v, dm2v, base_overrides = build_inputs(args.param_file)
     if args.force_noise_free:
