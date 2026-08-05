@@ -71,8 +71,8 @@ models:
     estimator: "default" # options are "perfect" and "default"; perfect estimator uses the model e-field for estimation, while default estimator uses the standard pairwise probing method  
     starting_contrast: 3.5e-4 # starting contrast value for dmstartmap_filenames; if changing starting DM maps update this value
     dmstartmap_filenames:
-      - "gitl_start_compact_dm1.fits"  # can provide full path including filename or just a filename if the file is located in the modelpath
-      - "gitl_start_compact_dm2.fits"  # can provide full path including filename or just a filename if the file is located in the modelpath
+      - "../any/dmabs_init_dm1.fits" #"gitl_start_compact_dm1.fits"  # can provide full path including filename or just a filename if the file is located in the modelpath
+      - "../any/dmabs_init_dm2.fits" #"gitl_start_compact_dm2.fits"  # can provide full path including filename or just a filename if the file is located in the modelpath
     lrow: 0 # Do not modify
     lcol: 0 # Do not modify
     corgi_overrides: 
@@ -83,9 +83,10 @@ models:
       # null -> use cgisim default (from cgisim_bandpasses.txt).
       # Only works for SPC modes (spc-wide/band4, spc-spec); HLC/Band 1 is limited to precomputed FPM wavelengths.
       nlam: null
+      polaxis: 0
       # Adding off-axis companions that will be injected into every GITL frame
       # vmag = Vega magnitude, position_x_mas/position_y_mas are the dRA and dDEC offsets from the host star in mas
       point_sources:
         - vmag: 2.25
-          position_x_mas: 3000
+          position_x_mas: 700
           position_y_mas: 0.0
