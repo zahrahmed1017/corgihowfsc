@@ -171,7 +171,7 @@ class CorgisimManager:
         # Hardcoded defaults
         optics_keywords = {
             'cor_type': self.cor_mapped,
-            'use_errors': 0,
+            'use_errors': 2,
             'polaxis': self.polaxis,
             'output_dim': self.output_dim,
             'use_dm1': 1,
@@ -241,7 +241,7 @@ class CorgisimManager:
 
         optics_keywords = {
             'cor_type': self.cor_mapped,
-            'use_errors': 0,
+            'use_errors': 2,
             'polaxis': self.polaxis,
             'output_dim': self.output_dim,
             'use_dm1': 1,
