@@ -348,11 +348,11 @@ def run_sweep(cfg, hconf, mode, dm1v, dm2v, base_overrides, lind, exptime, out_d
               f'contrast(combined)={contrast_combined:.3e}, '
               f'contrast(companion only)={contrast_companion:.3e}')
     # Save contrast info for plot
+    iwa_lamd, owa_lamd = fov_range_lamd(mgr_host.cor_mapped)
     np.savez(os.path.join(out_dir, "contrast_vs_xmas.npz"), x_mas=x_mas, mas_per_lamd=mas_per_lamd, c_combined=np.array(c_combined), 
                 c_companion=np.array(c_companion), host_contrast=host_contrast, iwa_lambd=iwa_lamd, owa_lamd=owa_lamd)
 
-    make_gif(frame_paths, os.path.join(out_dir, 'companion_sweep.gif'))
-    iwa_lamd, owa_lamd = fov_range_lamd(mgr_host.cor_mapped)
+    make_gif(frame_paths, os.path.join(out_dir, 'companion_sweep.gif')) 
     plot_contrast(np.array(x_mas), np.array(c_combined), np.array(c_companion),
                   host_contrast, mas_per_lamd, iwa_lamd, owa_lamd, mgr_host.cor_mapped,
                   os.path.join(out_dir, 'contrast_vs_separation.png'))
