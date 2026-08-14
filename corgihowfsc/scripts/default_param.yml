@@ -22,7 +22,7 @@ sim_settings:
   loop_framework: "corgi-howfsc" # do not modify 
   precomp: "precomp_jacs_always" # options: 'precomp_jacs_always', 'precomp_all_once', 'load_all' (only if defjacpath is not None)
   output_every_iter: true # whether to save the output frames at every iteration (true) or after all iterations are done (false)
-  niter: 10 # number of iterations to run
+  niter: 1 # number of iterations to run
   mode: "wfov_band4" # options: see models
   dark_hole: "360deg"  # options: see models
   probe_shape: "default" 
@@ -73,20 +73,24 @@ models:
     dmstartmap_filenames:
       - "../any/dmabs_init_dm1.fits" #"gitl_start_compact_dm1.fits"  # can provide full path including filename or just a filename if the file is located in the modelpath
       - "../any/dmabs_init_dm2.fits" #"gitl_start_compact_dm2.fits"  # can provide full path including filename or just a filename if the file is located in the modelpath
+      # - "C:/Users/zahmed1/Documents/cgisim_cpp/roman_preflight_proper/examples/spc-wide_ni_3e-9_dm1_v.fits"
+      # - "C:/Users/zahmed1/Documents/cgisim_cpp/roman_preflight_proper/examples/spc-wide_ni_3e-9_dm2_v.fits"
     lrow: 0 # Do not modify
     lcol: 0 # Do not modify
     corgi_overrides: 
-      # Parameters forwarded to GitlImage initialization
+      ## Parameters forwarded to GitlImage initialization
       is_noise_free: true
+      use_errors: 1 # use optical error maps in PROPER (0 = false)
       oversampling_factor: 3 # always odd number
-      # Number of monochromatic wavelengths sampled within each subband.
-      # null -> use cgisim default (from cgisim_bandpasses.txt).
-      # Only works for SPC modes (spc-wide/band4, spc-spec); HLC/Band 1 is limited to precomputed FPM wavelengths.
+      cor_type: spc-mswc #coronagraph mode is derived from the sim_settings mode parameter. Overriding to use the mswc spc mask.
+      ## Number of monochromatic wavelengths sampled within each subband.
+      ## null -> use cgisim default (from cgisim_bandpasses.txt).
+      ## Only works for SPC modes (spc-wide/band4, spc-spec); HLC/Band 1 is limited to precomputed FPM wavelengths.
       nlam: null
-      polaxis: 0
-      # Adding off-axis companions that will be injected into every GITL frame
-      # vmag = Vega magnitude, position_x_mas/position_y_mas are the dRA and dDEC offsets from the host star in mas
+      polaxis: 10
+      ## Adding off-axis companions that will be injected into every GITL frame
+      ## vmag = Vega magnitude, position_x_mas/position_y_mas are the dRA and dDEC offsets from the host star in mas
       point_sources:
         - vmag: 2.25
-          position_x_mas: 700
+          position_x_mas: 10800
           position_y_mas: 0.0
