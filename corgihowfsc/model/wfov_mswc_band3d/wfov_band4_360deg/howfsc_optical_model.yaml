@@ -55,7 +55,7 @@ sls:
     lam: 7.914113988892523e-07
     ft_dir: reverse
     sp:
-      afn: ../any/spm_mswc_amp.fits
+      afn: ../any/spm_amp.fits
       pdp: 296.10504150390625
       pfn: ../any/subband0/spm_ph.fits
     lyot:
@@ -84,7 +84,7 @@ sls:
     lam: 8.235731508369222e-07
     ft_dir: reverse
     sp:
-      afn: ../any/spm_mswc_amp.fits
+      afn: ../any/spm_amp.fits
       pdp: 296.10504150390625
       pfn: ../any/subband1/spm_ph.fits
     lyot:
@@ -113,7 +113,7 @@ sls:
     lam: 8.558346455967925e-07
     ft_dir: reverse
     sp:
-      afn: ../any/spm_mswc_amp.fits
+      afn: ../any/spm_amp.fits
       pdp: 296.10504150390625
       pfn: ../any/subband2/spm_ph.fits
     lyot:
