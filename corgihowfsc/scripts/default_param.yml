@@ -58,8 +58,6 @@ models:
     # - two filenames relative to modelpath, or
     # - two absolute paths.
     # Mixed absolute/relative entries are not supported.
-      #- "C:/Users/zahmed1/Documents/corgihowfsc/corgihowfsc/model/wfov_band4/any/dmabs_init_dm1.fits"  # can provide full path including filename or just a filename if the file is located in the modelpath
-      #- "C:/Users/zahmed1/Documents/corgihowfsc/corgihowfsc/model/wfov_band4/any/dmabs_init_dm2.fits"  # can provide full path including filename or just a filename if the file is located in the modelpath
       - "../any/dmabs_init_dm1.fits"  # can provide full path including filename or just a filename if the file is located in the modelpath
       - "../any/dmabs_init_dm2.fits"  # can provide full path including filename or just a filename if the file is located in the modelpath
     lrow: 436 # Do not modify
@@ -87,7 +85,7 @@ models:
       ## null -> use cgisim default (from cgisim_bandpasses.txt).
       ## Only works for SPC modes (spc-wide/band4, spc-spec); HLC/Band 1 is limited to precomputed FPM wavelengths.
       nlam: null
-      polaxis: 10
+      polaxis: 10 # 10 is the default, includes all polarization aberrations.
       ## Adding off-axis companions that will be injected into every GITL frame
       ## vmag = Vega magnitude, position_x_mas/position_y_mas are the dRA and dDEC offsets from the host star in mas
       point_sources:
