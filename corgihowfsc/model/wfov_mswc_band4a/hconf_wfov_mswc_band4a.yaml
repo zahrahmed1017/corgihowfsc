@@ -24,7 +24,7 @@ excam:
 
 # Hardware configuration for observation
 hardware:
-  sequence_list: [WFOV_WFOV_4A_SEED, WFOV_WFOV_4B_SEED, WFOV_WFOV_4C_SEED]
+  sequence_list: [WFOV_WFOV_4A_SEED]
   sequence_observation: WFOV_WFOV_4_SEED
   pointer: pointer_howfsc.yaml
 
