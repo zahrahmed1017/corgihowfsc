@@ -1,9 +1,8 @@
 %% Pad/Generate masks for MSWC
 % Folder to add to path for this script to run:
-% \\exoplanetshare\labdata\FundedProjects\MSWC\MSWC_ISFM2023\hcitOMC\lib_matlab_ames\misc_utilities
-% \\exoplanetshare\labdata\FundedProjects\MSWC\MSWC_ISFM2023\hcitOMC\lib_matlab_ames\resample
 % falco-matlab\
 
+clear; clc;
 %% Re-sampled PROPER MSWC SPM for Compact Model 
 
 N_resampled = 300;
@@ -258,4 +257,99 @@ fprintf(fid, '    halfWidthYPix: %.6f\n', halfWidthY_lamD * ppl);
 fprintf(fid, '    xOffsetPix: %.6f\n', xOffset_lamD * ppl);
 fprintf(fid, '    yOffsetPix: %.6f\n', yOffset_lamD * ppl);
 fclose(fid);
+end
+
+%% Resample functions (copied from sources listed at the top of this script so that the script is more stand-alone)
+
+function pupil = pupil_generate(filename, D, D_type, centering)
+
+    A = fitsread(filename);
+    
+    switch D_type
+        case 'full-grid'
+            pupil = make2Dgrid(size(A,1), D, centering);
+            Area = trapz(trapz(A))*pupil.dx*pupil.dy;
+            Deff = 2*sqrt(Area/pi);
+            Dc = 2*max(max(pupil.rr.*A));
+    
+        case 'effective-area'
+            Areapix = trapz(trapz(A));
+            Dpix = 2*sqrt(Areapix/pi); % radius in pixels of an unobstructed aperture of the same area
+            pupil = make2Dgrid(size(A,1), D/Dpix * size(A,1),centering); % second number refers to full diameter of grid, usually slightly larger than Deff
+            Area = trapz(trapz(A))*pupil.dx*pupil.dy;
+            Deff = D;
+            Dc = 2*max(max(pupil.rr.*A));
+    
+        case 'circumscribed'
+            pupilpix = make2Dgrid(size(A,1), size(A,1), centering);
+            Dpix = 2*max(max(pupilpix.rr.*A)); % diameter in pixels of an unobstructed aperture of the same area 
+            pupil = make2Dgrid(size(A,1), D/Dpix * size(A,1),centering); 
+            Area = trapz(trapz(A))*pupil.dx*pupil.dy;
+            Deff = 2*sqrt(Area/pi);
+            Dc = D;
+    end
+    
+    pupil.A = A;
+    pupil.D = D;
+    pupil.D_type = D_type;
+    pupil.Dc = Dc;
+    pupil.Deff = Deff;
+    pupil.Area = Area;
+end
+
+function grid = make2Dgrid(N,Dgrid,centering)
+
+    grid.N = N;
+    grid.Dgrid = Dgrid;
+    grid.dx = grid.Dgrid/grid.N;
+    grid.dy = grid.Dgrid/grid.N;
+    if mod(N,2) % i.e. if N is odd
+    
+        if strcmp(centering, 'pixel-centered')
+            grid.x = linspace(-(grid.Dgrid - grid.dx)/2, (grid.Dgrid - grid.dx)/2, grid.N); % origin at pixel corner
+        else
+            grid.x = ((1:grid.N) - grid.N/2 - 1)*grid.dx; % origin at pixel center
+        end
+    
+    else
+    
+        if strcmp(centering, 'pixel-centered')
+            grid.x = ((1:grid.N) - grid.N/2 - 1)*grid.dx; % origin at pixel center
+        else
+            grid.x = linspace(-(grid.Dgrid - grid.dx)/2, (grid.Dgrid - grid.dx)/2, grid.N); % origin at pixel corner
+        end
+    end
+    grid.y = grid.x; % note: may need to transpose
+    grid.r = - grid.x(floor(end/2+1):-1:1);
+    if strcmp(centering, 'vertex-centered')
+        if ~mod(N,2)
+            grid.r = grid.r(2:end);
+        end
+    end
+    [grid.xx, grid.yy] = meshgrid(grid.x,grid.y);
+    [grid.ttheta, grid.rr]=cart2pol(grid.xx, grid.yy);
+end
+
+function grid_out = grid_rotate(grid_in, theta)
+
+    grid_out = grid_in;
+    % rotate grid
+    grid_out.xx =  grid_in.xx * cos(theta) - grid_in.yy * sin(theta);
+    grid_out.yy =  grid_in.xx * sin(theta) + grid_in.yy * cos(theta);
+end
+
+function [Eout] = ames_resampleRotatePupil(pupilInFile,N_resampled, roll_angle)
+    D = 1;
+    
+    pupil = pupil_generate(pupilInFile, D, 'full-grid', 'pixel-centered');
+    pupil.E = pupil.A;
+    
+    % make resampled / rotated pupil
+    pupil_resampled = make2Dgrid(N_resampled, D, 'pixel-centered');
+    pupil_resampled = grid_rotate(pupil_resampled, roll_angle); % second argument = angle in radians
+    pupil_resampled.E = interp2(pupil.xx, pupil.yy, pupil.A, pupil_resampled.xx, pupil_resampled.yy);
+    pupil_resampled.E(isnan(pupil_resampled.E)) = 0;
+    
+    Eout = pupil_resampled.E;
+
 end
