@@ -1,4 +1,7 @@
+import os
+
 import numpy as np
+from astropy.io import fits
 
 # Mapping configuration - easy to update for new modes
 # NOTE - Add new mappings here as support is added
@@ -84,6 +87,50 @@ def map_wavelength_to_corgisim_bandpass(wavelength_m, tolerance=5e-9):
     available_nm = [wl * 1e9 for wl in corgisim_wavelengths.values()]
     raise ValueError(f"Wavelength {wavelength_m*1e9:.1f} nm does not match any "
                     f"CorgiSim options {available_nm} nm within ±{tolerance*1e9:.0f} nm")
+
+def resolve_field_stop_array(corgi_overrides, cfg, modelpath, sl_index=0):
+    """
+    Convert a field stop fits file into a 2D array that can be passed into PROPER.
+
+    Extract 'field_stop_array_fn' / 'field_stop_width_m' / 'field_stop_width_lamD'
+    out of corgi_overrides (does nothing if 'field_stop_array_fn' isn't present) and
+    replaces them with 'field_stop_array' (2D np array) and
+    'field_stop_array_sampling_m' (meters/pixel at the FSAM plane). The pixel
+    scale is derived from the compact model's own fs.ppl for the given
+    subband (cfg.sl_list[sl_index].fs.pixperlod), so the full model can't
+    drift out of sync with howfsc_optical_model.yaml.
+
+    Call this after cfg = CoronagraphMode(cfgfile) and before the
+    corgi_overrides dict is handed to GitlImage (or shipped to MPI workers).
+
+    Args:
+        corgi_overrides: dict loaded from default_param.yml, mutated in place
+            and also returned for convenience.
+        cfg: howfsc.model.mode.CoronagraphMode, already loaded, giving access
+            to cfg.sl_list[i].fs.pixperlod.
+        modelpath: directory that 'field_stop_array_fn' is relative to (same
+            convention as dmstartmap_filenames).
+        sl_index: which cfg.sl_list subband's fs.ppl to use. Defaults to 0
+            (the only subband for wfov_mswc_band4a).
+    """
+    fn = corgi_overrides.pop('field_stop_array_fn', None)
+    if fn is None:
+        return corgi_overrides
+
+    if not os.path.isabs(fn):
+        fn = os.path.join(modelpath, fn)
+
+    width_m = corgi_overrides.pop('field_stop_width_m')
+    width_lamD = corgi_overrides.pop('field_stop_width_lamD')
+
+    ppl = cfg.sl_list[sl_index].fs.pixperlod
+    meters_per_pixel = width_m / (width_lamD * ppl)
+
+    corgi_overrides['field_stop_array'] = fits.getdata(fn).astype(np.float64)
+    corgi_overrides['field_stop_array_sampling_m'] = meters_per_pixel
+
+    return corgi_overrides
+
 
 def calculate_mas_per_lamD(wavelength_m):
     """

@@ -81,6 +81,16 @@ models:
       use_errors: 1 # use optical error maps in PROPER (0 = false)
       oversampling_factor: 3 # always odd number
       # cor_type: spc-mswc #coronagraph mode is derived from the sim_settings mode parameter. Overriding to use the mswc spc mask.
+      ## Field stop for the full (corgisim/PROPER) model. field_stop_array_fn is
+      ## resolved relative to modelpath (same convention as dmstartmap_filenames).
+      ## field_stop_width_m/field_stop_width_lamD are the same physical-width
+      ## source numbers used in generate_temporary_masks.m (Riggs et al. Table 3);
+      ## resolve_field_stop_array() converts these into field_stop_array +
+      ## field_stop_array_sampling_m at runtime, using the compact model's own
+      ## fs.ppl so the two models can't drift out of sync.
+      field_stop_array_fn: "../any/fs_amp.fits"
+      field_stop_width_m: 309.1e-6
+      field_stop_width_lamD: 9
       ## Number of monochromatic wavelengths sampled within each subband.
       ## null -> use cgisim default (from cgisim_bandpasses.txt).
       ## Only works for SPC modes (spc-wide/band4, spc-spec); HLC/Band 1 is limited to precomputed FPM wavelengths.

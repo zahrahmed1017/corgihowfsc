@@ -21,6 +21,7 @@ from corgihowfsc.utils.contrast_nomalization import CorgiNormalization, EETCNorm
 from corgihowfsc.gitl.nulling_gitl import nulling_gitl
 from corgihowfsc.utils.corgisim_gitl_frames import GitlImage
 from corgihowfsc.utils.output_management import make_output_file_structure
+from corgihowfsc.utils.corgisim_utils import resolve_field_stop_array
 
 eetc_path = os.path.dirname(os.path.abspath(eetc.__file__))
 howfscpath = os.path.dirname(os.path.abspath(corgihowfsc.__file__))
@@ -195,6 +196,13 @@ def main(param_file_name='default_param.yml', fullpath=False):
 
     if num_proper_process is not None:
         corgi_overrides['NCPUS'] = num_proper_process
+
+    # Resolve field_stop_array_fn (+ width_m/width_lamD) into the actual
+    # field_stop_array/field_stop_array_sampling_m PROPER expects, using this
+    # subband's compact-model fs.ppl. Must happen before corgi_overrides is
+    # sent to MPI workers below, and is a no-op if the model's hconf/overrides
+    # don't set field_stop_array_fn.
+    corgi_overrides = resolve_field_stop_array(corgi_overrides, cfg, modelpath)
 
     # Initialise the workers with the necessary data and configuration to run the howfsc loop, including the model files and any overrides
     if mpi_comm is not None:
