@@ -487,6 +487,38 @@ def load_files(args, howfscpath):
         if dmstartmap_filenames is None:
             dmstartmap_filenames = ['iter_061_dm1.fits', 'iter_061_dm2.fits']
 
+    elif mode == 'wfov_mswc_band4a':
+        modelpath_band = os.path.join(howfscpath, 'model', 'wfov_mswc_band4a')
+        modelpath = os.path.join(modelpath_band, mode + '_' + args.dark_hole)
+        probepath = os.path.join(howfscpath, 'model', 'probes')
+
+        hconffile = os.path.join(modelpath_band, 'hconf_wfov_mswc_band4a.yaml')
+
+        cfgfile = os.path.join(modelpath, 'howfsc_optical_model.yaml')
+        cstratfile = os.path.join(modelpath, 'cstrat_wfov_mswc_band4a.yaml')
+
+        probe0file = os.path.join(probepath, 'wfov_dmrel_1e-5_cos_constrained.fits')
+        probe1file = os.path.join(probepath, 'wfov_dmrel_1e-5_sinlr_constrained.fits')
+        probe2file = os.path.join(probepath, 'wfov_dmrel_1e-5_sinud_constrained.fits')
+        probefiles = {}
+        probefiles[0] = probe0file
+        probefiles[2] = probe1file
+        probefiles[1] = probe2file
+
+        if jacpath is not None:
+            jacfile = os.path.join(jacpath, 'wfov_mswc_band4a_jac.fits')
+        else:
+            jacfile = []
+
+        n2clistfiles = [
+            os.path.join(model_path_all, 'ones_like_fs.fits'),
+            os.path.join(model_path_all, 'ones_like_fs.fits'),
+            os.path.join(model_path_all, 'ones_like_fs.fits'),
+        ]
+
+        if dmstartmap_filenames is None:
+            dmstartmap_filenames = ['iter_061_dm1.fits', 'iter_061_dm2.fits']
+            
     else:
         # should not reach here; argparse should catch this
         raise ValueError('Invalid coronagraph mode type')
