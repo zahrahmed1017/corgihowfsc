@@ -72,7 +72,7 @@ title("Difference")
 %% Square field stop and dark zone
 
 nPix   = 153;                  % grid size (rows = cols), matches EXCAM crop and existing fs/dh_masks
-ppl    = 3.1382097356516145;   % pixels per lambda/D -- copy/pasted from howfsc_optical_model.yaml
+ppl    = 3.1382097356516145;   % pixels per lambda/D for the fs. copy/pasted from howfsc_optical_model.yaml
 
 width_m = 309.1e-6; % width of the square field stop in meters from Table 3 of Riggs et al. March 2025
 width_lamD = 9; % width of the square field stop in lamD from Table 3 of Riggs et al. March 2025
@@ -81,7 +81,7 @@ width_lamD = 9; % width of the square field stop in lamD from Table 3 of Riggs e
 % (full width = 2*halfWidth)
 fs_halfWidth_x_lamD = 4.5;    % From Table 3 of AJ Riggs "Flight Masks of the Roman Space Telescope Coronagraph Instrument" Paper
 fs_halfWidth_y_lamD = 4.5;
-fs_filletRadius_m = 30e-6;    % From Table 3 of Riggs et al. March 2025 (30 micron) 
+fs_filletRadius_m = 0; %30e-6;    % From Table 3 of Riggs et al. March 2025 (30 micron) 
 fs_filletRadius_lamD = convert_fillet_radius(fs_filletRadius_m, width_m, width_lamD);
 
 
@@ -102,20 +102,21 @@ edgeSoftnessPix = 0.0;
 
 outDir = 'sandbox/zja';
 
-%% ---------------- FIELD STOP ----------------
+%% Field Stop
 fs_mask = build_rounded_square_mask(nPix, ppl, fs_halfWidth_x_lamD, fs_halfWidth_y_lamD, ...
                             fs_filletRadius_lamD, fs_xOffset_lamD, fs_yOffset_lamD, ...
                             fs_rotDeg, edgeSoftnessPix);
 
 
 
-%% ---------------- DARK HOLE ----------------
+%% Dark Hole Mask
 dh_mask = build_rounded_square_mask(nPix, ppl, dh_halfWidth_x_lamD, dh_halfWidth_y_lamD, ...
                             0.0, dh_xOffset_lamD, dh_yOffset_lamD, 0.0, 0.0);
 % DH mask is a hard binary mask
-% dh_mask = double(dh_mask > 0.5);
+% dh_mask = double(dh_mask > 0.5); % just as a safety check, but I don't
+% actually need this
 
-%% ---------------- PLOT (lambda/D axes) ----------------
+%% Plot with lambda/D axes
 % Same center convention as build_rounded_square_mask: c = (nPix+1)/2
 c = (nPix + 1) / 2;
 lamD_axis = ((1:nPix) - c) / ppl;
@@ -167,12 +168,12 @@ fitswrite(ones(153,153), fullfile(outDir,'pixelweights_ones_nlam1_nrow153.fits')
 function mask = build_rounded_square_mask(nPix, ppl, halfWidthX_lamD, halfWidthY_lamD, ...
                                    filletRadius_lamD, xOffset_lamD, yOffset_lamD, ...
                                    rotDeg, edgeSoftnessPix)
-% Build an nPix x nPix rounded-rectangle (square with fillet corners)
+% Build an nPix x nPix square with fillet corners
 % transmission mask, via a signed-distance-function (SDF) test, centered
 % at array-center + (xOffset, yOffset) [lambda/D], half-widths
 % halfWidthX/Y [lambda/D], fillet radius filletRadius_lamD [lambda/D],
 % optional clocking rotDeg, and an analytic anti-aliased edge of width
-% edgeSoftnessPix pixels (0 = hard binary edge, exact 0/1).
+% edgeSoftnessPix pixels (0 = hard binary edge).
 %
 % Convention: array center for an odd nPix is at index (nPix+1)/2 (1-indexed),
 % matching howfsc's centered-array assumption (ModelElement docstring).
