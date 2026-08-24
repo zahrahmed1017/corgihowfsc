@@ -71,7 +71,7 @@ sls:
       tip: 0
       tilt: 0
     fs:
-      afn: ../../every_mask_config/ones_like_fs.fits
+      afn: ../any/fs_amp.fits
       pfn: ../../every_mask_config/zeros_like_fs.fits
       ppl: 3.1382097356516145
     fpm:
