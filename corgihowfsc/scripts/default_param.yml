@@ -23,8 +23,8 @@ sim_settings:
   precomp: "precomp_jacs_always" # options: 'precomp_jacs_always', 'precomp_all_once', 'load_all' (only if defjacpath is not None)
   output_every_iter: true # whether to save the output frames at every iteration (true) or after all iterations are done (false)
   niter: 1 # number of iterations to run
-  mode: "wfov_band4" # options: see models
-  dark_hole: "360deg"  # options: see models
+  mode: "wfov_mswc_band4a" # options: see models
+  dark_hole: "5x5lamD" #"360deg"  # options: see models
   probe_shape: "default" 
 
 paths:
@@ -39,7 +39,7 @@ path_overrides:
   # Leave as null to use the mode-derived path.
   # Can also override defjacpath and dmstartmap_filenames by providing full paths
   cfgfile: null
-  cstratfile: "C:/Users/zahmed1/Documents/corgihowfsc/corgihowfsc/model/wfov_band4/wfov_band4_360deg/cstrat_wfov_band4_copyNfovBand1.yaml"
+  cstratfile: null #"C:/Users/zahmed1/Documents/corgihowfsc/corgihowfsc/model/wfov_band4/wfov_band4_360deg/cstrat_wfov_band4_copyNfovBand1.yaml"
   hconffile: null
 
 crop:
@@ -80,7 +80,7 @@ models:
       is_noise_free: true
       use_errors: 1 # use optical error maps in PROPER (0 = false)
       oversampling_factor: 3 # always odd number
-      cor_type: spc-mswc #coronagraph mode is derived from the sim_settings mode parameter. Overriding to use the mswc spc mask.
+      # cor_type: spc-mswc #coronagraph mode is derived from the sim_settings mode parameter. Overriding to use the mswc spc mask.
       ## Number of monochromatic wavelengths sampled within each subband.
       ## null -> use cgisim default (from cgisim_bandpasses.txt).
       ## Only works for SPC modes (spc-wide/band4, spc-spec); HLC/Band 1 is limited to precomputed FPM wavelengths.
