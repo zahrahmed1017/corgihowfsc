@@ -110,6 +110,7 @@ class CorgisimManager:
         self.sptype = self.corgi_overrides.get('sptype', self.host_star_properties['spectral_type'])
         self.ref_flag = self.corgi_overrides.get('ref_flag', self.host_star_properties['ref_flag'])
         self.point_sources = _build_point_source_info(self.corgi_overrides.get('point_sources', []))
+        self.host_star_enabled = self.corgi_overrides.get('host_star_enabled', True)
         # Optional override for the number of monochromatic wavelengths sampled
         # within each subband. None => use cgisim's default (from cgisim_bandpasses.txt).
         self.nlam = self.corgi_overrides.get('nlam', None)
@@ -325,6 +326,24 @@ class CorgisimManager:
         --------
         generate_on_axis_psf : Equivalent method with explicit optics keyword construction.
         """
+
+        if not self.host_star_enabled:
+            if len(self.point_sources) != 1:
+                raise ValueError(
+                    "host_star_enabled is currently set to False. This configuration only "
+                    "supports exactly one point source (single off-axis star case) "
+                    "for Super-Nyquist Wavefront Control. Either set host_star_enabled=null (default = True) "
+                    "or reduce point_sources to a single source."
+                )
+            if not self.is_noise_free:
+                raise NotImplementedError(
+                    "host_star_enabled=False is only currently implemented for is_noise_free=True"
+                )
+            optics = self.create_optics(dm1v, dm2v, lind)
+            offaxis_scene = scene.Scene(self.host_star_properties, self.point_sources)
+            sim_scene = optics.get_host_star_psf(self.base_scene)
+            sim_scene = optics.inject_point_sources(offaxis_scene, sim_scene)
+            return sim_scene.point_source_image.data
 
         optics = self.create_optics(dm1v, dm2v, lind)
 

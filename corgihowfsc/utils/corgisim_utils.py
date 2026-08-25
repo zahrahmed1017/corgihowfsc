@@ -13,7 +13,8 @@ _MANAGER_KEYS = frozenset({
     'sptype',
     'ref_flag',
     'point_sources',
-    'nlam'
+    'nlam',
+    'host_star_enabled'
 })
 
 CGI_TO_CORGI_MAPPING = {
