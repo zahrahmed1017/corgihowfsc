@@ -5,6 +5,22 @@ import logging
 import yaml
 import sys
 
+import numpy as np
+
+def _yaml_safe(obj):
+    "Recursively replace values yaml.safe_dump can't represent (i.e. numpy arrays) with "
+    "plain text equivalents that can be represented in the yaml. Since the output yaml is mainly for "
+    "record-keeping and not data-loading, this should be fine"
+
+    if isinstance(obj, np.ndarray):
+        return f"<ndarray shape={obj.shape} dtype={obj.dtype}>"
+    if isinstance(obj, np.generic):
+        return obj.item()
+    if isinstance(obj, dict):
+        return {k: _yaml_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_yaml_safe(v) for v in obj]
+    return obj
 
 def setup_logging(debug=False, logfile=None):
     """Configure root logging for the current process."""
@@ -76,7 +92,7 @@ def save_run_config(args, fileout):
 
     # save yaml
     with config_path.open("w") as f:
-        yaml.safe_dump(cfg, f, sort_keys=False)
+        yaml.safe_dump(_yaml_safe(cfg), f, sort_keys=False)
 
     return config_path
 
@@ -98,4 +114,4 @@ def update_yml(path, updates: dict):
     merged.update(existing)  # then the args
 
     with path.open("w", encoding="utf-8") as f:
-        yaml.safe_dump(merged, f, sort_keys=False)
+        yaml.safe_dump(_yaml_safe(merged), f, sort_keys=False)
