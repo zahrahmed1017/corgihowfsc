@@ -6,7 +6,7 @@ clear; clc;
 %% Re-sampled PROPER MSWC SPM for Compact Model 
 
 N_resampled = 300;
-roll_angle = deg2rad(90);
+roll_angle = deg2rad(90.0);
 
 orig_spm_path = "C:/Users/zahmed1/Documents/cgisim_cpp/roman_preflight_proper/preflight_data/spc_20200623_mswc/SPM_SPC-20200623_982_rounded9_gray_rotated.fits";
 orig_spm = pupil_generate(orig_spm_path, 1, 'full-grid', 'pixel-centered');
@@ -158,7 +158,7 @@ dh_yaml_out = fullfile(outDir, 'dh_sw_mask.yaml');
 write_dh_yaml(dh_yaml_out, nPix, nPix, ppl, ...
     dh_halfWidth_x_lamD, dh_halfWidth_y_lamD, ...
     dh_xOffset_lamD, dh_yOffset_lamD);
-fprintf('Wrote DH yaml (documentation only, not read by howfsc): %s\n', dh_yaml_out);
+fprintf('Wrote DH yaml: %s\n', dh_yaml_out);
 
 % Also adding the pixelweights fits file here:
 fitswrite(ones(153,153), fullfile(outDir,'pixelweights_ones_nlam1_nrow153.fits'));
