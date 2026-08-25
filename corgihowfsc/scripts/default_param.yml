@@ -78,6 +78,8 @@ models:
       is_noise_free: true
       use_errors: 1 # use optical error maps in PROPER (0 = false)
       oversampling_factor: 3 # always odd number
+      bandpass: '4'
+      host_star_enabled: false
       # cor_type: spc-mswc #coronagraph mode is derived from the sim_settings mode parameter. Overriding to use the mswc spc mask.
       ## Field stop for the full (corgisim/PROPER) model. field_stop_array_fn is
       ## relative to modelpath (same convention as dmstartmap_filenames).
