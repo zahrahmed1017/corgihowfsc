@@ -90,7 +90,10 @@ class CorgisimManager:
         
         # map cgihowfsc mode to corgihowfsc
         corgi_base_mode = CGI_TO_CORGI_MAPPING[self.cor]
-        self.cor_mapped = f'{corgi_base_mode}_band{self.bandpass}'
+        if corgi_base_mode == 'spc-mswc':
+            self.cor_mapped = corgi_base_mode
+        else:
+            self.cor_mapped = f'{corgi_base_mode}_band{self.bandpass}'
 
         # Extract host star properties
         if self.hconf is not None:
