@@ -9,6 +9,7 @@ Functions to build a relative DM probe and other propagation manipulation
 """
 
 import numpy as np
+import copy
 
 from howfsc.model.mode import CoronagraphMode
 from howfsc.util.constrain_dm import tie_with_matrix
@@ -17,6 +18,9 @@ from howfsc.util.dmhtoph import dmhtoph
 from howfsc.util.insertinto import insertinto
 import howfsc.util.check as check
 from howfsc.util.prop_tools import efield, open_efield
+from corgihowfsc.utils.corgisim_utils import calculate_mas_per_lamD
+from howfsc.model.mask import Epup
+from howfsc.model.singlelambda import SingleLambda
 
 
 def make_dmrel_probe_gaussian(cfg, dmlist, dact, xcenter, ycenter, sigma, target, lod_min, lod_max,
@@ -240,3 +244,32 @@ def probe_gaussian(nact, dact, xcenter, ycenter, sigma, height):
     ddm = height * np.exp(-(xx**2 + yy**2) / (2 * sigma**2))
 
     return ddm
+
+def mas_to_tiptilt(position_x_mas, position_y_mas, sl, roll_angle=0.0):
+    """
+    Convert a (dRA, dDec) offset in mas into the (tip, tilt) EXCAM-pixel values that reproduce PROPER's 
+    off-axis phase ramp (roman_preflight.py:754-762) on sl.epup
+    """
+
+    theta = np.deg2rad(-roll_angle)
+    x0, y0 = -position_x_mas, position_y_mas
+    excam_dx = x0*np.cos(theta) - y0*np.sin(theta)
+    excam_dy = x0*np.sin(theta) + y0*np.cos(theta)
+
+    mas_per_pixel = calculate_mas_per_lamD(sl.lam) / sl.fs.pixperlod
+    tip = excam_dy / mas_per_pixel
+    tilt = excam_dx / mas_per_pixel
+    return tip, tilt
+
+def build_offaxis_cfg(cfg, position_x_mas, position_y_mas, roll_angle=0.0):
+    offaxis_cfg = copy.deepcopy(cfg)
+    for i, sl in enumerate(offaxis_cfg.sl_list):
+        tip, tilt = mas_to_tiptilt(position_x_mas, position_y_mas, sl,
+                                   roll_angle=roll_angle)
+        new_epup = Epup(lam=sl.epup.lam, e=sl.epup.e, 
+                        pixperpupil=sl.epup.pixperpupil, tip=tip, tilt=tilt)
+        offaxis_cfg.sl_list[i] = SingleLambda(
+            lam=sl.lam, epup=new_epup, dmlist=sl.dmlist, pupil=sl.pupil,
+            fpm=sl.fpm, lyot=sl.lyot, fs=sl.fs, dh=sl.dh,
+            initmaps=sl.initmaps, ft_dir=sl.ft_dir
+        )

@@ -22,6 +22,7 @@ from corgihowfsc.gitl.nulling_gitl import nulling_gitl
 from corgihowfsc.utils.corgisim_gitl_frames import GitlImage
 from corgihowfsc.utils.output_management import make_output_file_structure
 from corgihowfsc.utils.corgisim_utils import resolve_field_stop_array
+from corgihowfsc.utils.cgi_prop_tools import build_offaxis_cfg
 
 eetc_path = os.path.dirname(os.path.abspath(eetc.__file__))
 howfscpath = os.path.dirname(os.path.abspath(corgihowfsc.__file__))
@@ -174,6 +175,18 @@ def main(param_file_name='default_param.yml', fullpath=False):
                                                                                                            howfscpath)
 
     cfg = CoronagraphMode(cfgfile)
+
+    # Route "host_star_enabled" flag to the Jacobian calculation where we convert the off-axis source to a tip/tilt to be used by the compact model
+    raw_overrides = model_cfg.get('corgi_overrides', {})
+    if raw_overrides.get('host_star_enabled', True) is False:
+        ps = raw_overrides.get('point_sources', [])
+        if len(ps) != 1:
+            raise ValueError(
+                'host_star_enabled=False currently only works with exactly' \
+                'one off-axis point source.'
+            )
+        cfg = build_offaxis_cfg(cfg, ps[0]['position_x_mas'], ps[0]['position_y_mas'])
+
     hconf = loadyaml(hconffile, custom_exception=TypeError)
 
     # Define control and estimator strategy
