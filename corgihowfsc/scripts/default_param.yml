@@ -3,14 +3,14 @@ active_model: "corgihowfsc" # choose from "cgi-howfsc" or "corgihowfsc". This wi
 runtime:
   # PROPER processes inside each image worker.
   # MPI: match this to --cpus-per-task.
-  num_proper_process: 5 
+  num_proper_process: 1 
 
   # Local only: Jacobian worker processes. Ignored in MPI mode.
   num_jac_process: 15 
 
   # Local: image worker processes; null means serial image generation.
   # MPI: active worker ranks; usually total MPI ranks minus 1 manager.
-  num_imager_worker: 3
+  num_imager_worker: 1
 
   # false: local run; true: MPI manager-worker run.
   use_mpi: false 
