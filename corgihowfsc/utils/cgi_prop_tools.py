@@ -273,3 +273,4 @@ def build_offaxis_cfg(cfg, position_x_mas, position_y_mas, roll_angle=0.0):
             fpm=sl.fpm, lyot=sl.lyot, fs=sl.fs, dh=sl.dh,
             initmaps=sl.initmaps, ft_dir=sl.ft_dir
         )
+    return offaxis_cfg
