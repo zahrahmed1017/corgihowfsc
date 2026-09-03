@@ -257,8 +257,8 @@ def mas_to_tiptilt(position_x_mas, position_y_mas, sl, roll_angle=0.0):
     excam_dy = x0*np.sin(theta) + y0*np.cos(theta)
 
     mas_per_pixel = calculate_mas_per_lamD(sl.lam) / sl.fs.pixperlod
-    tip = excam_dy / mas_per_pixel
-    tilt = excam_dx / mas_per_pixel
+    tip = excam_dx / mas_per_pixel
+    tilt = excam_dy / mas_per_pixel
     return tip, tilt
 
 def build_offaxis_cfg(cfg, position_x_mas, position_y_mas, roll_angle=0.0):
