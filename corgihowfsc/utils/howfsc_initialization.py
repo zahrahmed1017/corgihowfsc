@@ -512,8 +512,6 @@ def load_files(args, howfscpath):
 
         n2clistfiles = [
             os.path.join(model_path_all, 'ones_like_fs.fits'),
-            os.path.join(model_path_all, 'ones_like_fs.fits'),
-            os.path.join(model_path_all, 'ones_like_fs.fits'),
         ]
 
         if dmstartmap_filenames is None:

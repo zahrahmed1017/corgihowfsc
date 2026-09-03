@@ -6,7 +6,7 @@ runtime:
   num_proper_process: 1 
 
   # Local only: Jacobian worker processes. Ignored in MPI mode.
-  num_jac_process: 15 
+  num_jac_process: 1 
 
   # Local: image worker processes; null means serial image generation.
   # MPI: active worker ranks; usually total MPI ranks minus 1 manager.
@@ -22,7 +22,7 @@ sim_settings:
   loop_framework: "corgi-howfsc" # do not modify 
   precomp: "precomp_jacs_always" # options: 'precomp_jacs_always', 'precomp_all_once', 'load_all' (only if defjacpath is not None)
   output_every_iter: true # whether to save the output frames at every iteration (true) or after all iterations are done (false)
-  niter: 1 # number of iterations to run
+  niter: 10 # number of iterations to run
   mode: "wfov_mswc_band4a" # options: see models
   dark_hole: "5x5lamD" #"360deg"  # options: see models
   probe_shape: "default" 
@@ -74,31 +74,35 @@ models:
     lrow: 0 # Do not modify
     lcol: 0 # Do not modify
     corgi_overrides: 
-      ## Parameters forwarded to GitlImage initialization
+      ######## Parameters forwarded to GitlImage initialization #########
       is_noise_free: true
       use_errors: 1 # use optical error maps in PROPER (0 = false)
       oversampling_factor: 3 # always odd number
       bandpass: '4'
-      host_star_enabled: false
-      # cor_type: spc-mswc #coronagraph mode is derived from the sim_settings mode parameter. Overriding to use the mswc spc mask.
+      ######## COR_TYPE #########
+      ## coronagraph mode is derived from the sim_settings mode parameter. Overriding to use the mswc spc mask.
+      # cor_type: spc-mswc 
+      ######## FIELD_STOP_ARRAY ##########
       ## Field stop for the full (corgisim/PROPER) model. field_stop_array_fn is
       ## relative to modelpath (same convention as dmstartmap_filenames).
       ## field_stop_width_m/field_stop_width_lamD are the same physical-width
       ## source numbers used in generate_temporary_masks.m (Riggs et al. Table 3);
-      ## resolve_field_stop_array() converts these into field_stop_array +
-      ## field_stop_array_sampling_m at runtime, using the compact model's own
-      ## fs.ppl so the two models the same.
-      field_stop_array_fn: "../any/fs_amp.fits"
-      field_stop_width_m: 309.1e-6
-      field_stop_width_lamD: 9
+      # field_stop_array_fn: "../any/fs_amp.fits"
+      # field_stop_width_m: 309.1e-6
+      # field_stop_width_lamD: 9
+      ######## NLAM ########
       ## nlam = Number of monochromatic wavelengths sampled within each subband.
       ## null -> use cgisim default (from cgisim_bandpasses.txt).
       ## Only works for SPC modes (spc-wide/band4, spc-spec); HLC/Band 1 is limited to precomputed FPM wavelengths.
       nlam: 10
-      polaxis: 10 # 10 is the default, includes all polarization aberrations.
+      ######## POLAXIS ########
+      ## 10 is the default, includes all polarization aberrations.
+      polaxis: 10 
+      ######## OFF-AXIS COMPANIONS ########
       ## Adding off-axis companions that will be injected into every GITL frame
       ## vmag = Vega magnitude, position_x_mas/position_y_mas are the dRA and dDEC offsets from the host star in mas
-      point_sources:
-        - vmag: 2.25
-          position_x_mas: 7200
-          position_y_mas: 0.0
+      # point_sources:
+      #   - vmag: 2.25
+      #     position_x_mas: 7200
+      #     position_y_mas: 0.0
+      # host_star_enabled: false
