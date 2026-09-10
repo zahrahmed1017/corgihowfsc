@@ -245,18 +245,24 @@ def probe_gaussian(nact, dact, xcenter, ycenter, sigma, height):
 
     return ddm
 
-def mas_to_tiptilt(position_x_mas, position_y_mas, sl, roll_angle=0.0):
+def mas_to_tiptilt(position_x_mas, position_y_mas, sl, roll_angle=0.0, lam=None):
     """
-    Convert a (dRA, dDec) offset in mas into the (tip, tilt) EXCAM-pixel values that reproduce PROPER's 
+    Convert a (dRA, dDec) offset in mas into the (tip, tilt) EXCAM-pixel values that reproduce PROPER's
     off-axis phase ramp (roman_preflight.py:754-762) on sl.epup
+
+    lam: wavelength (m) to use for the mas-per-pixel plate scale. Defaults to
+     sl.lam; pass an override to evaluate the same channel's geometry at a
+     different wavelength (e.g. for broadband compact-model sums).
     """
+    if lam is None:
+        lam = sl.lam
 
     theta = np.deg2rad(-roll_angle)
     x0, y0 = -position_x_mas, position_y_mas
     excam_dx = x0*np.cos(theta) - y0*np.sin(theta)
     excam_dy = x0*np.sin(theta) + y0*np.cos(theta)
 
-    mas_per_pixel = calculate_mas_per_lamD(sl.lam) / sl.fs.pixperlod
+    mas_per_pixel = calculate_mas_per_lamD(lam) / sl.fs.pixperlod
     tip = excam_dx / mas_per_pixel
     tilt = excam_dy / mas_per_pixel
     return tip, tilt
@@ -266,11 +272,58 @@ def build_offaxis_cfg(cfg, position_x_mas, position_y_mas, roll_angle=0.0):
     for i, sl in enumerate(offaxis_cfg.sl_list):
         tip, tilt = mas_to_tiptilt(position_x_mas, position_y_mas, sl,
                                    roll_angle=roll_angle)
-        new_epup = Epup(lam=sl.epup.lam, e=sl.epup.e, 
+        new_epup = Epup(lam=sl.epup.lam, e=sl.epup.e,
                         pixperpupil=sl.epup.pixperpupil, tip=tip, tilt=tilt)
         offaxis_cfg.sl_list[i] = SingleLambda(
             lam=sl.lam, epup=new_epup, dmlist=sl.dmlist, pupil=sl.pupil,
             fpm=sl.fpm, lyot=sl.lyot, fs=sl.fs, dh=sl.dh,
             initmaps=sl.initmaps, ft_dir=sl.ft_dir
         )
+    return offaxis_cfg
+
+
+def build_broadband_offaxis_cfg(cfg, ind, lam, position_x_mas, position_y_mas,
+                                 roll_angle=0.0):
+    """
+    Like build_offaxis_cfg, but also re-evaluate channel `ind` at wavelength
+    `lam` instead of its native (yaml-defined) wavelength.
+
+    This reuses channel `ind`'s mask amplitude/phase arrays unchanged (the
+    standard "achromatic mask across a subband" approximation), but:
+     - re-derives the off-axis tip/tilt for `lam` (mas_to_tiptilt), since the
+       EXCAM plate scale in mas/pixel is chromatic (lambda/D), and
+     - sets SingleLambda.lam = lam, which feeds the physical DM-to-DM Fresnel
+       propagation (get_fp) in SingleLambda.eprop, so near-field
+       wavelength-dependence is captured correctly.
+
+    Used to build a weighted multi-wavelength (broadband) compact-model
+    image for comparison against a corgisim/PROPER subband image, by calling
+    this once per sampled wavelength and summing the resulting intensities
+    weighted by the stellar spectrum's photon counts in each wavelength bin.
+
+    Arguments:
+     cfg: CoronagraphMode object
+     ind: index of cfg.sl_list channel to re-evaluate
+     lam: wavelength (m) to evaluate that channel at
+     position_x_mas, position_y_mas: off-axis source position, in mas
+     roll_angle: roll angle, in degrees. Defaults to 0.
+
+    Returns:
+     a deep copy of cfg with sl_list[ind] replaced by a SingleLambda
+     evaluated at `lam`. Other channels are left untouched (and untouched
+     channels' wavelength no longer corresponds to `ind`'s, so only
+     sl_list[ind] should be used downstream, e.g. via open_efield(..., ind)).
+    """
+    offaxis_cfg = copy.deepcopy(cfg)
+    sl = offaxis_cfg.sl_list[ind]
+
+    tip, tilt = mas_to_tiptilt(position_x_mas, position_y_mas, sl,
+                               roll_angle=roll_angle, lam=lam)
+    new_epup = Epup(lam=lam, e=sl.epup.e, pixperpupil=sl.epup.pixperpupil,
+                    tip=tip, tilt=tilt)
+    offaxis_cfg.sl_list[ind] = SingleLambda(
+        lam=lam, epup=new_epup, dmlist=sl.dmlist, pupil=sl.pupil,
+        fpm=sl.fpm, lyot=sl.lyot, fs=sl.fs, dh=sl.dh,
+        initmaps=sl.initmaps, ft_dir=sl.ft_dir
+    )
     return offaxis_cfg
