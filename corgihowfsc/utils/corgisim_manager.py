@@ -379,7 +379,16 @@ class CorgisimManager:
 
     def generate_efield(self, dm1v, dm2v, lind=0, exptime=1.0, gain=1, bias=0, crop=None):
         """
-        Generate the e-field from corgisim
+        Generate the e-field from corgisim.
+
+        If host_star_enabled is False, generates the e-field for the single
+        off-axis point source configured via corgi_overrides['point_sources'],
+        correctly positioned by setting PROPER's source_x_offset_mas /
+        source_y_offset_mas PASSVALUE keywords (the same mechanism
+        corgisim.instrument.CorgiOptics.inject_point_sources uses for the
+        intensity-image path). If host_star_enabled is True (default), behavior
+        is unchanged: the on-axis (host star / boresight) e-field is generated.
+
         Args:
             dm1v, dm2v: DM1 and DM2 voltages
             lind: wavelength index
@@ -390,15 +399,38 @@ class CorgisimManager:
             gain: EM gain setting for the detector model. Defaults to 1.
             bias: Detector bias/offset level [e-]. Defaults to 0.
         Return:
-            Generated_efield: Generated electric field, full or cropped. Should be in normalized unit. 
+            Generated_efield: Generated electric field, full or cropped. Should be in normalized unit.
         """
         optics = self.create_optics(dm1v, dm2v, lind)
+
+        if not self.host_star_enabled:
+            if len(self.point_sources) != 1:
+                raise ValueError(
+                    "host_star_enabled is currently set to False. This configuration only "
+                    "supports exactly one point source (single off-axis star case) "
+                    "for Super-Nyquist Wavefront Control. Either set host_star_enabled=null (default = True) "
+                    "or reduce point_sources to a single source."
+                )
+            point_source_dra = self.point_sources[0]['position_x']
+            point_source_ddec = self.point_sources[0]['position_y']
+            point_source_dx, point_source_dy = instrument.skycoord_to_excamcoord(
+                point_source_dra, point_source_ddec, optics.roll_angle
+            )
+            optics.optics_keywords.update({
+                'source_x_offset_mas': point_source_dx,
+                'source_y_offset_mas': point_source_dy,
+            })
+
         generated_efield = optics.get_e_field()
 
         e_field_norm = np.zeros_like(generated_efield)
 
         use_pupil_mask = 0 if 'hlc' in self.cor_mapped else 1
 
+        # Unocculted-peak normalization field must stay on-axis regardless of
+        # host_star_enabled -- clear any offset keys set above before this call.
+        optics.optics_keywords.pop('source_x_offset_mas', None)
+        optics.optics_keywords.pop('source_y_offset_mas', None)
         optics.optics_keywords.update({'use_fpm': 0, 'use_lyot_stop': 1, 'use_field_stop': 0, 'use_pupil_mask': use_pupil_mask})  # to get the unocculted e-field for normalization
 
         e_field_unocc = optics.get_e_field()
