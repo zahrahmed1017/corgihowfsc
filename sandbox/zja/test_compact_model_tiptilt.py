@@ -13,7 +13,7 @@ from corgihowfsc.utils.cgi_prop_tools import (
 CFGFILE = 'corgihowfsc/model/wfov_mswc_band4a/wfov_mswc_band4a_5x5lamD/howfsc_optical_model.yaml'
 HCONFFILE = 'corgihowfsc/model/wfov_mswc_band4a/hconf_wfov_mswc_band4a.yaml'
 IND = 0
-DX_MAS, DY_MAS = 7000.0, 0
+DX_MAS, DY_MAS = 6000.0, 0
 
 def peak_offset(img):
     cr, cc = img.shape[0] // 2, img.shape[1] // 2
@@ -77,6 +77,32 @@ def main():
     I_corgisim = manager.generate_host_star_psf(dm1v, dm2v, lind=IND)
     print("corgisim (broadband subband) peak offset (row,col):", peak_offset(I_corgisim))
 
+    # generate_efield() previously ignored point_sources entirely (always on-axis).
+    # Check that it now agrees with generate_host_star_psf()'s already-validated
+    # off-axis peak position. Only peak POSITION is comparable between the two --
+    # generate_efield() is peak-normalized while generate_host_star_psf() is
+    # flux-scaled, so their magnitudes are not expected to match.
+    E_corgisim = manager.generate_efield(dm1v, dm2v, lind=IND)
+    I_from_efield = np.abs(E_corgisim) ** 2
+    I_from_efield_2d = I_from_efield.sum(axis=0) if I_from_efield.ndim == 3 else I_from_efield
+    print("generate_efield() peak offset (row,col):", peak_offset(I_from_efield_2d))
+
+    # Cross-check against generate_host_star_psf() (already-validated) rather than
+    # the linear mas_to_tiptilt prediction directly: at large separations relative
+    # to the array size (e.g. this script's DX_MAS=7000, ~101 lam/D against a
+    # 153px array), the occulted/cropped peak position is dominated by
+    # array-truncation effects for BOTH corgisim methods identically, so the
+    # linear prediction isn't expected to hold there. What this fix needs is generate_efield() agreeing with the
+    # already-validated generate_host_star_psf().
+    tol_px = 1
+    off_psf = peak_offset(I_corgisim)
+    off_efield = peak_offset(I_from_efield_2d)
+    assert all(abs(a - b) <= tol_px for a, b in zip(off_psf, off_efield)), (
+        f"generate_efield() peak offset {off_efield} does not match "
+        f"generate_host_star_psf() peak offset {off_psf} within {tol_px}px"
+    )
+    print("PASS: generate_efield() off-axis peak matches generate_host_star_psf()")
+
     # Build the compact-model broadband image over the same wavelength grid
     # and per-wavelength weights corgisim used for its off-axis point source.
     optics = manager.create_optics(dm1v, dm2v, IND)
@@ -90,13 +116,14 @@ def main():
           f"relative weights: {np.round(weights / weights.sum(), 3)}")
     print("compact model (broadband) peak offset (row,col):", peak_offset(I_compact_broadband))
 
-    imgs = [I_compact_broadband, I_corgisim]
-    titles = ['compact model, broadband sum (open_efield)', 'corgisim/PROPER (broadband)']
+    imgs = [I_compact_broadband, I_corgisim, I_from_efield_2d]
+    titles = ['compact model, broadband sum (open_efield)', 'corgisim/PROPER (broadband)',
+              'corgisim generate_efield()']
     log_imgs = [np.log10(img / img.max() + 1e-10) for img in imgs]
     vmax = max(im.max() for im in log_imgs)
     vmin = max(im.min() for im in log_imgs)  # tightest floor common to both, so noise floor isn't washed out
 
-    fig, axes = plt.subplots(1, 2, figsize=(11, 5))
+    fig, axes = plt.subplots(1, 3, figsize=(16, 5))
     for ax, log_img, img, title in zip(axes, log_imgs, imgs, titles):
         im = ax.imshow(log_img, origin='lower', vmin=vmin, vmax=vmax)
         cr, cc = img.shape[0] // 2, img.shape[1] // 2
