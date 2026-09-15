@@ -66,7 +66,7 @@ models:
   corgihowfsc:
     backend_type: "corgihowfsc"
     normalization_type: "eetc" # other options are "corgisim-off-axis" and "corgisim-on-axis"
-    estimator: "default" # options are "perfect" and "default"; perfect estimator uses the model e-field for estimation, while default estimator uses the standard pairwise probing method  
+    estimator: "perfect" # options are "perfect" and "default"; perfect estimator uses the model e-field for estimation, while default estimator uses the standard pairwise probing method
     starting_contrast: 3.5e-4 # starting contrast value for dmstartmap_filenames; if changing starting DM maps update this value
     dmstartmap_filenames:
       - "../any/dmabs_init_dm1.fits" #"gitl_start_compact_dm1.fits"  # can provide full path including filename or just a filename if the file is located in the modelpath
@@ -103,6 +103,6 @@ models:
       ## vmag = Vega magnitude, position_x_mas/position_y_mas are the dRA and dDEC offsets from the host star in mas
       point_sources:
         - vmag: 2.25
-          position_x_mas: 6000
+          position_x_mas: 700
           position_y_mas: 0.0
       host_star_enabled: false
