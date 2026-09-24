@@ -43,6 +43,8 @@ Output layout:
       check/    finite_diff.json  finite_diff_table.txt
       loop/     run_baseline/  run_perturbed/  dmstart_a_dm{1,2}.fits
                 G.npy  dh_mask.npy  ripple.npz  metrics.json
+                linearity_check.json  control_check.json  (compact-model-only,
+                no corgisim -- see check_linearity/check_control_inversion)
       figures/  loop_overview.png  loop_diagnostic.png  loop_field_diagnostic.png
 """
 
@@ -61,7 +63,8 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 import astropy.io.fits as pyfits
 
-from howfsc.control.cs import ControlStrategy
+from howfsc.control.cs import ControlStrategy, get_wdm, get_we0
+from howfsc.control.inversion import jac_solve
 from howfsc.model.mode import CoronagraphMode
 from howfsc.util.loadyaml import loadyaml
 from howfsc.util.insertinto import insertinto
@@ -92,10 +95,10 @@ RUN_PREFIX = 'offaxis_jac_test'
 # see clearly, small enough for the linear model to be valid), spatial
 # frequency so the resulting speckle lands inside the dark hole (10 lam/D away from on-axis)
 RIPPLE_AMP_RAD = 0.2
-RIPPLE_FX = 100
+RIPPLE_FX = 10
 RIPPLE_FY = -10
 
-TOL_STEP2_RELERR = 0.70
+TOL_STEP2_RELERR = 0.30
 TOL_STEP4_REDUCTION = 5.0
 
 
@@ -120,6 +123,7 @@ class Setup:
     modelpath: str
     cfgfile: str
     cstratfile: str
+    hconffile: str
     cfg0: object      # off-axis CoronagraphMode (used for Jacobian + fast check)
     dm10: np.ndarray  # baseline DM1 voltages
     dm20: np.ndarray  # baseline DM2 voltages
@@ -147,7 +151,7 @@ def load_setup():
         dmstartmap_filenames=default_dmstart,
         fileout=os.path.join(OUTPUT_ROOT, 'unused.fits'),
     )
-    modelpath, cfgfile, _, cstratfile, _, _, _, dmstartmaps = load_files(probe_args, HOWFSCPATH)
+    modelpath, cfgfile, _, cstratfile, _, hconffile, _, dmstartmaps = load_files(probe_args, HOWFSCPATH)
     dm10, dm20 = dmstartmaps
 
     cfg0 = build_offaxis_cfg(CoronagraphMode(cfgfile), dx_mas, dy_mas)
@@ -164,7 +168,7 @@ def load_setup():
             'lrow': model_cfg['lrow'], 'lcol': model_cfg['lcol'],
         },
         default_dmstart_files=default_dmstart,
-        modelpath=modelpath, cfgfile=cfgfile, cstratfile=cstratfile,
+        modelpath=modelpath, cfgfile=cfgfile, cstratfile=cstratfile, hconffile=hconffile,
         cfg0=cfg0, dm10=dm10, dm20=dm20,
         nact=cfg0.dmlist[0].registration['nact'],
         dm2_nact=cfg0.dmlist[1].registration['nact'],
@@ -175,21 +179,23 @@ def load_setup():
 def compute_jacobian(setup):
     """Baseline compact-model Jacobian for the off-axis cfg.
 
-    Returns (G, dh_mask): G is complex with shape (n_actuators, n_dh_pixels),
-    ordered DM1 then DM2, each row-major flattened (howfsc_precomputation
-    builds its own ijlist as range(sum(nact**2 per DM))); dh_mask is the
-    boolean dark-hole mask on the (nrow, ncol) crop.
+    Returns (G, dh_mask, jtwj_map): G is complex with shape (n_actuators,
+    n_dh_pixels), ordered DM1 then DM2, each row-major flattened
+    (howfsc_precomputation builds its own ijlist as range(sum(nact**2 per
+    DM))); dh_mask is the boolean dark-hole mask on the (nrow, ncol) crop;
+    jtwj_map is the JTWJMap howfsc_precomputation also builds, needed by
+    check_control_inversion() (jac_solve's jtwj argument).
     """
     cp = setup.crop_params
     subcroplist = [(cp['lrow'], cp['lcol'], cp['nrow'], cp['ncol'])]
-    jac, _, _ = howfsc_precomputation(
+    jac, jtwj_map, _ = howfsc_precomputation(
         cfg=setup.cfg0, dmset_list=[setup.dm10, setup.dm20],
         cstrat=ControlStrategy(setup.cstratfile),
         subcroplist=subcroplist, jacmethod='fast', do_n2clist=False,
     )
     G = jac[0] + 1j * jac[1]
     dh_mask = insertinto(setup.cfg0.sl_list[0].dh.e, (cp['nrow'], cp['ncol'])).astype(bool)
-    return G, dh_mask
+    return G, dh_mask, jtwj_map
 
 
 @dataclass
@@ -216,6 +222,132 @@ def make_ripple(setup, amp=RIPPLE_AMP_RAD, fx=RIPPLE_FX, fy=RIPPLE_FY):
     a_vec = np.concatenate([h.flatten(), np.zeros(setup.dm2_nact ** 2)])
     return Ripple(amp=amp, fx=fx, fy=fy, h=h, dm1v_base=setup.dm10,
                   dm1v_a=dm1v_a, dm2v=setup.dm20, a_vec=a_vec)
+
+
+# ---------------------------------------------------------------------------
+# Decoupled sanity checks: compact-model-only, no corgisim. These isolate two
+# questions step 2/4 (which compare against corgisim) can't separate on their
+# own -- see the "why does check pass but step 2 fail so differently" thread.
+# ---------------------------------------------------------------------------
+
+def check_linearity(setup, ripple, G, dh_mask):
+    """Does G's LINEAR extrapolation (G.T @ a_vec) match the compact model's
+    own FULL NONLINEAR finite-difference response to the entire ripple `a`
+    (ripple.amp rad across up to nact**2 actuators simultaneously, not a
+    single small poke)? Compact-model only, no corgisim -- isolates "does G's
+    linearity hold at this large, multi-actuator amplitude" from "does the
+    compact model agree with corgisim" (step 2/4, which conflates both).
+    finite_diff_selfcheck() tests a *different* thing: single-actuator, small
+    (delta=0.01 rad) local derivatives; this tests the full injected ripple.
+    """
+    E0 = compact_efield(setup.cfg0, [setup.dm10, setup.dm20], 0)
+    E1 = compact_efield(setup.cfg0, [ripple.dm1v_a, ripple.dm2v], 0)
+    dE_nl = (E1 - E0)[dh_mask]
+    dE_lin = G.T @ ripple.a_vec
+
+    rel_err = float(np.linalg.norm(dE_nl - dE_lin) / np.linalg.norm(dE_nl))
+    corr = float(abs(np.vdot(dE_lin, dE_nl)) /
+                (np.linalg.norm(dE_lin) * np.linalg.norm(dE_nl)))
+    print(f'[linearity] compact-model-only, no corgisim: G.a vs the compact '
+          f"model's own nonlinear response to the full ripple:")
+    print(f'[linearity] ||G.a - dE_nonlinear|| / ||dE_nonlinear|| = {rel_err:.3f}, '
+          f'correlation = {corr:.4f}')
+    return {'lin_rel_err': rel_err, 'lin_corr': corr}
+
+
+def check_control_inversion(setup, G, jtwj_map, ripple, dh_mask, iteration=1, prev_c=None):
+    """Decoupled control-law sanity check, no corgisim. Builds a SYNTHETIC,
+    self-consistent 'measurement' e0 = G.T @ a_vec (exactly what G predicts
+    for the known ripple -- no corgisim, no compact-vs-corgisim mismatch),
+    runs it through the REAL production jac_solve/inv_to_dm machinery (same
+    functions/weighting corgihowfsc.gitl.modular_gitl uses), and checks
+    whether the recovered DM move is close to -a_vec -- the move that would
+    exactly cancel a self-consistent aberration. Tests only whether the
+    inversion math (beta/wdm/we0/jtwj weighting, jac_solve) does something
+    sane, entirely decoupled from whether G matches corgisim (that's step 2).
+
+    IMPORTANT SCOPE LIMIT: e0 is exactly what G predicts, by construction --
+    this cannot, even in principle, tell you whether the real (corgisim)
+    loop's contrast improves. It only tells you the inversion math itself
+    isn't broken. If step 2 shows G doesn't match corgisim, a clean result
+    here does not contradict that, and does not predict real-world nulling.
+
+    jac_solve's own docstring: solves the weighted least-squares problem and
+    *returns -x*, i.e. exactly the DM move (in height radians, same units/
+    ordering as a_vec -- no inv_to_dm volts conversion needed) that should
+    null the field passed in as e0.
+
+    prev_c, iteration: cstrat's regularization (beta) is typically scheduled
+    to get WEAKER as contrast improves, so prev_c matters: using a prev_c
+    that's better (lower) than the actual DM state being tested understates
+    beta relative to what the real run would use, making the inversion look
+    artificially well-conditioned. Default here is the COMPACT MODEL's own
+    predicted contrast at the ripple-perturbed state (mean|E[dh_mask]|^2 from
+    compact_efield at ripple.dm1v_a/dm2v) -- still fully decoupled from
+    corgisim, but representative of the actual DM state under test, unlike
+    an arbitrary value such as setup.starting_contrast.
+    """
+    hconf = loadyaml(setup.hconffile, custom_exception=TypeError)
+    cstrat = ControlStrategy(setup.cstratfile)
+    dmlistmeas = [setup.dm10, setup.dm20]
+    tielist = [setup.cfg0.dmlist[0].dmvobj.tiemap, setup.cfg0.dmlist[1].dmvobj.tiemap]
+    cp = setup.crop_params
+    subcroplist = [(cp['lrow'], cp['lcol'], cp['nrow'], cp['ncol'])]
+    if prev_c is None:
+        E1 = compact_efield(setup.cfg0, [ripple.dm1v_a, ripple.dm2v], 0)
+        prev_c = float(np.mean(np.abs(E1[dh_mask]) ** 2))
+
+    jac_raw = np.stack([G.real, G.imag])
+    e0 = G.T @ ripple.a_vec
+
+    beta = cstrat.get_regularization(iteration, prev_c)
+    wdm = get_wdm(setup.cfg0, dmlistmeas, tielist)
+    we0 = get_we0(setup.cfg0, cstrat, subcroplist, iteration, prev_c)
+    jtwj = jtwj_map.retrieve_jtwj(cstrat, iteration, prev_c)
+    bpmeas = np.zeros(e0.shape[0], dtype=bool)
+
+    deltadm = jac_solve(jac_raw, e0, beta, wdm, we0, bpmeas, jtwj,
+                        hconf['howfsc']['method'])
+    deltadm = np.asarray(deltadm).ravel()  # jac_solve returns an (N,1) column vector
+
+    # Primary metric: does applying deltadm actually null the field, in G's
+    # own linear sense? DM1 has nact**2 ~ 2300 actuators solving for only 256
+    # complex DH pixels -- a hugely underdetermined problem, so many DM
+    # patterns reproduce the same field, and Tikhonov regularization picks a
+    # particular (roughly minimum-weighted-norm) one. There is no reason that
+    # solution has to equal -a_vec exactly even when the inversion is working
+    # correctly, so ||deltadm - (-a)|| alone is not a fair pass/fail test.
+    e_after = G.T @ (ripple.a_vec + deltadm)
+    field_null_ratio = float(np.linalg.norm(e_after) / np.linalg.norm(e0))
+
+    # Secondary/diagnostic: how deltadm compares to -a_vec directly. Informative
+    # (large deviation here, small deviation there would flag a genuinely
+    # different-looking but still-valid solution), but not the pass/fail metric.
+    target = -ripple.a_vec
+    n1 = setup.nact ** 2  # DM1-only slice -- the only DM the ripple touches
+
+    def _compare(vec, tgt):
+        return (float(np.linalg.norm(vec - tgt) / np.linalg.norm(tgt)),
+                float(np.dot(vec, tgt) / (np.linalg.norm(vec) * np.linalg.norm(tgt))))
+
+    rel_err, corr = _compare(deltadm, target)
+    rel_err_dm1, corr_dm1 = _compare(deltadm[:n1], target[:n1])
+
+    print(f'[control check] synthetic e0 = G.a (self-consistent, no corgisim); '
+          f'beta={beta:.3g} (iteration={iteration}, prev_c={prev_c:.3g}, representative)')
+    print(f'[control check] PRIMARY: ||G.(a+deltadm)|| / ||G.a|| = {field_null_ratio:.4f} '
+          f'(fraction of the field left after the solved correction, in G\'s own '
+          f'linear sense -- should be << 1 for a working inversion)')
+    print(f'[control check] secondary, NOT pass/fail (underdetermined -- many DM '
+          f'patterns null the same field): ||deltadm - (-a)|| / ||a|| = {rel_err:.3f}, '
+          f'correlation = {corr:.4f} (all actuators); DM1-only rel_err = {rel_err_dm1:.3f}, '
+          f'correlation = {corr_dm1:.4f}')
+    return {
+        'beta': float(beta), 'prev_c_used': float(prev_c), 'iteration_used': iteration,
+        'field_null_ratio': field_null_ratio,
+        'rel_err_all': rel_err, 'corr_all': corr,
+        'rel_err_dm1': rel_err_dm1, 'corr_dm1': corr_dm1,
+    }
 
 
 def _write_json(path, obj):
@@ -354,7 +486,7 @@ def run_fast_check(setup, out_dir, G=None, dh_mask=None):
     """Stage 1. Returns the list of FDRow."""
     if G is None:
         print('Computing baseline Jacobian for the self-consistency check...')
-        G, dh_mask = compute_jacobian(setup)
+        G, dh_mask, _ = compute_jacobian(setup)
     rows = finite_diff_selfcheck(setup, G, dh_mask)
     print_fd_report(rows)
 
@@ -462,9 +594,12 @@ def _run_done(run_dir, niter):
 
 
 def run_loop_test(setup, out_dir, amp=RIPPLE_AMP_RAD, fx=RIPPLE_FX, fy=RIPPLE_FY,
-                  reuse_runs=False, G=None, dh_mask=None):
+                  reuse_runs=False, G=None, dh_mask=None, jtwj_map=None):
     """Stage 2: baseline (niter=1) + perturbed (niter=2) nulling loops, and
-    save everything replot() needs. Returns the loop directory."""
+    save everything replot() needs. Also runs the two decoupled,
+    compact-model-only sanity checks (check_linearity, check_control_inversion)
+    before the (slow) corgisim loops, since neither needs corgisim. Returns
+    the loop directory."""
     loop_dir = os.path.join(out_dir, 'loop')
     os.makedirs(loop_dir, exist_ok=True)
 
@@ -476,7 +611,7 @@ def run_loop_test(setup, out_dir, amp=RIPPLE_AMP_RAD, fx=RIPPLE_FX, fy=RIPPLE_FY
 
     if G is None:
         print('Computing baseline Jacobian...')
-        G, dh_mask = compute_jacobian(setup)
+        G, dh_mask, jtwj_map = compute_jacobian(setup)
     np.save(os.path.join(loop_dir, 'G.npy'), G)
     np.save(os.path.join(loop_dir, 'dh_mask.npy'), dh_mask)
     np.savez(os.path.join(loop_dir, 'ripple.npz'), h=ripple.h, dm1v_base=ripple.dm1v_base,
@@ -487,6 +622,15 @@ def run_loop_test(setup, out_dir, amp=RIPPLE_AMP_RAD, fx=RIPPLE_FX, fy=RIPPLE_FY
         'mode': setup.mode, 'dark_hole': setup.dark_hole,
         'pixperlod': float(setup.cfg0.sl_list[0].fs.pixperlod),
     })
+
+    lin = check_linearity(setup, ripple, G, dh_mask)
+    _write_json(os.path.join(loop_dir, 'linearity_check.json'), lin)
+    if jtwj_map is not None:
+        ctrl = check_control_inversion(setup, G, jtwj_map, ripple, dh_mask)
+        _write_json(os.path.join(loop_dir, 'control_check.json'), ctrl)
+    else:
+        print('[control check] skipped -- no jtwj_map available (should not '
+              'happen; compute_jacobian() always returns one)')
 
     run_dir_baseline = os.path.join(loop_dir, 'run_baseline')
     run_dir_perturbed = os.path.join(loop_dir, 'run_perturbed')
@@ -562,7 +706,7 @@ def load_loop_results(out_dir):
     if os.path.exists(g_path) and os.path.exists(mask_path):
         G, dh_mask = np.load(g_path), np.load(mask_path)
     else:
-        G, dh_mask = compute_jacobian(setup)
+        G, dh_mask, _ = compute_jacobian(setup)
         np.save(g_path, G)
         np.save(mask_path, dh_mask)
     if os.path.exists(ripple_path):
@@ -893,9 +1037,10 @@ def main(argv=None):
         run_loop_test(setup, args.out_dir, args.amp, args.fx, args.fy, args.reuse_runs)
     elif args.cmd == 'all':
         print('Computing baseline Jacobian...')
-        G, dh_mask = compute_jacobian(setup)
+        G, dh_mask, jtwj_map = compute_jacobian(setup)
         run_fast_check(setup, args.out_dir, G, dh_mask)
-        run_loop_test(setup, args.out_dir, args.amp, args.fx, args.fy, args.reuse_runs, G, dh_mask)
+        run_loop_test(setup, args.out_dir, args.amp, args.fx, args.fy, args.reuse_runs,
+                      G, dh_mask, jtwj_map)
         replot(args.out_dir, args.tol_relerr, args.tol_reduction)
 
 
