@@ -1,0 +1,14 @@
+nRows: 153
+nCols: 153
+shapes:
+  shape0:
+    shape: square
+    halfWidthXLamD: 2.500000
+    halfWidthYLamD: 2.500000
+    xOffsetLamD: 10.000000
+    yOffsetLamD: -10.000000
+    ppl: 2.9898610811
+    halfWidthXPix: 7.474653
+    halfWidthYPix: 7.474653
+    xOffsetPix: 29.898611
+    yOffsetPix: -29.898611
