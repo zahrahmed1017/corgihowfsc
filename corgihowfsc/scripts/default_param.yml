@@ -1,4 +1,4 @@
-active_model: "corgihowfsc" # choose from "cgi-howfsc" or "corgihowfsc". This will determine which imager model is used and which settings are applied to the imager initialization.
+active_model: "cgi-howfsc" # choose from "cgi-howfsc" or "corgihowfsc". This will determine which imager model is used and which settings are applied to the imager initialization.
 
 runtime:
   # PROPER processes inside each image worker.
@@ -22,7 +22,7 @@ sim_settings:
   loop_framework: "corgi-howfsc" # do not modify 
   precomp: "precomp_jacs_always" # options: 'precomp_jacs_always', 'precomp_all_once', 'load_all' (only if defjacpath is not None)
   output_every_iter: true # whether to save the output frames at every iteration (true) or after all iterations are done (false)
-  niter: 5 # number of iterations to run
+  niter: 10 # number of iterations to run
   mode: "wfov_mswc_band4a" # options: see models
   dark_hole: "5x5lamD" #"360deg"  # options: see models
   probe_shape: "default" 
@@ -51,7 +51,7 @@ models:
   cgi-howfsc:
     backend_type: "cgi-howfsc"
     normalization_type: "eetc"
-    estimator: "default" # options are "perfect" and "default"; perfect estimator uses the model e-field for estimation, while default estimator uses the standard pairwise probing method
+    estimator: "perfect" # options are "perfect" and "default"; perfect estimator uses the model e-field for estimation, while default estimator uses the standard pairwise probing method
     starting_contrast: 2e-4 # starting contrast value for dmstartmap_filenames; not actually used in compact model
     dmstartmap_filenames: 
     # Initial DM shape. Provide either:
@@ -62,6 +62,12 @@ models:
       - "../any/dmabs_init_dm2.fits"  # can provide full path including filename or just a filename if the file is located in the modelpath
     lrow: 436 # Do not modify
     lcol: 436 # Do not modify
+    corgi_overrides:
+      point_sources:
+          - vmag: 2.25
+            position_x_mas: 7000.0
+            position_y_mas: 0.0
+      host_star_enabled: false
 
   corgihowfsc:
     backend_type: "corgihowfsc"
@@ -103,6 +109,6 @@ models:
       ## vmag = Vega magnitude, position_x_mas/position_y_mas are the dRA and dDEC offsets from the host star in mas
       point_sources:
         - vmag: 2.25
-          position_x_mas: 700
+          position_x_mas: 7000.0
           position_y_mas: 0.0
       host_star_enabled: false
