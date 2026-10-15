@@ -10,10 +10,10 @@ from corgihowfsc.utils.cgi_prop_tools import (
     mas_to_tiptilt, build_offaxis_cfg, build_broadband_offaxis_cfg
 )
 
-CFGFILE = 'corgihowfsc/model/wfov_mswc_band4a/wfov_mswc_band4a_5x5lamD/howfsc_optical_model.yaml'
-HCONFFILE = 'corgihowfsc/model/wfov_mswc_band4a/hconf_wfov_mswc_band4a.yaml'
+CFGFILE = 'corgihowfsc/model/wfov_mswc_band3d/wfov_mswc_band3d_5x5lamD/howfsc_optical_model.yaml'
+HCONFFILE = 'corgihowfsc/model/wfov_mswc_band3d/hconf_wfov_mswc_band3d.yaml'
 IND = 0
-DX_MAS, DY_MAS = 6000.0, 0
+DX_MAS, DY_MAS = 6691.0, 0
 
 def peak_offset(img):
     cr, cc = img.shape[0] // 2, img.shape[1] // 2
@@ -66,9 +66,9 @@ def main():
     print("compact model (monochromatic) peak offset (row,col):", peak_offset(I_compact_mono))
 
     manager = CorgisimManager(
-        cfg=cfg, cstrat=None, hconf=hconf, cor='wfov_mswc_band4a',
+        cfg=cfg, cstrat=None, hconf=hconf, cor='wfov_mswc_band3d',
         corgi_overrides={
-            'bandpass': '4', 'host_star_enabled': False,
+            'bandpass': '3', 'subband': 'd','host_star_enabled': False,
             'point_sources': [{'vmag': 5.0, 'position_x_mas': DX_MAS, 'position_y_mas': DY_MAS}],
             'is_noise_free': True, 'output_dim': I_compact_mono.shape[0],
             'use_fpm': 0, 'NCPUS': 1,
@@ -116,14 +116,32 @@ def main():
           f"relative weights: {np.round(weights / weights.sum(), 3)}")
     print("compact model (broadband) peak offset (row,col):", peak_offset(I_compact_broadband))
 
-    imgs = [I_compact_broadband, I_corgisim, I_from_efield_2d]
-    titles = ['compact model, broadband sum (open_efield)', 'corgisim/PROPER (broadband)',
-              'corgisim generate_efield()']
+    # imgs = [I_compact_broadband, I_corgisim, I_from_efield_2d]
+    # titles = ['compact model, broadband sum (open_efield)', 'corgisim/PROPER (broadband)',
+    #           'corgisim generate_efield()']
+    # log_imgs = [np.log10(img / img.max() + 1e-10) for img in imgs]
+    # vmax = max(im.max() for im in log_imgs)
+    # vmin = max(im.min() for im in log_imgs)  # tightest floor common to both, so noise floor isn't washed out
+
+    # fig, axes = plt.subplots(1, 3, figsize=(16, 5))
+    # for ax, log_img, img, title in zip(axes, log_imgs, imgs, titles):
+    #     im = ax.imshow(log_img, origin='lower', vmin=vmin, vmax=vmax)
+    #     cr, cc = img.shape[0] // 2, img.shape[1] // 2
+    #     ax.plot(cc, cr, 'w+', ms=12, label='on-axis center')
+    #     ax.plot(cc + tip_pred, cr + tilt_pred, 'rx', ms=12, label='predicted (tip,tilt)')
+    #     ax.set_title(title)
+    #     ax.legend(loc='upper right', fontsize=7)
+    #     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label='log10(Normalized Intensity)')
+    # plt.tight_layout()
+    # plt.show()
+
+    imgs = [I_compact_broadband, I_corgisim]
+    titles = ['compact model, broadband sum (open_efield)', 'corgisim/PROPER (broadband)']
     log_imgs = [np.log10(img / img.max() + 1e-10) for img in imgs]
     vmax = max(im.max() for im in log_imgs)
     vmin = max(im.min() for im in log_imgs)  # tightest floor common to both, so noise floor isn't washed out
 
-    fig, axes = plt.subplots(1, 3, figsize=(16, 5))
+    fig, axes = plt.subplots(1, 2, figsize=(16, 5))
     for ax, log_img, img, title in zip(axes, log_imgs, imgs, titles):
         im = ax.imshow(log_img, origin='lower', vmin=vmin, vmax=vmax)
         cr, cc = img.shape[0] // 2, img.shape[1] // 2
