@@ -1,4 +1,4 @@
-active_model: "cgi-howfsc" # choose from "cgi-howfsc" or "corgihowfsc". This will determine which imager model is used and which settings are applied to the imager initialization.
+active_model: "corgihowfsc" # choose from "cgi-howfsc" or "corgihowfsc". This will determine which imager model is used and which settings are applied to the imager initialization.
 
 runtime:
   # PROPER processes inside each image worker.
@@ -22,8 +22,8 @@ sim_settings:
   loop_framework: "corgi-howfsc" # do not modify 
   precomp: "precomp_jacs_always" # options: 'precomp_jacs_always', 'precomp_all_once', 'load_all' (only if defjacpath is not None)
   output_every_iter: true # whether to save the output frames at every iteration (true) or after all iterations are done (false)
-  niter: 10 # number of iterations to run
-  mode: "wfov_mswc_band4a" # options: see models
+  niter: 2 # number of iterations to run
+  mode: "wfov_mswc_band3d" # options: see models
   dark_hole: "5x5lamD" #"360deg"  # options: see models
   probe_shape: "default" 
 
@@ -84,7 +84,11 @@ models:
       is_noise_free: true
       use_errors: 1 # use optical error maps in PROPER (0 = false)
       oversampling_factor: 3 # always odd number
-      bandpass: '4'
+      bandpass: '3'
+      ######## SUBBAND ########
+      ## Subband letter(s) per wavelength channel, e.g. 'd' -> bandpass '3d'.
+      ## null -> default order ('a', 'b', 'c', ...), so channel 0 is always 'a'.
+      subband: 'd'
       ######## COR_TYPE #########
       ## coronagraph mode is derived from the sim_settings mode parameter. Overriding to use the mswc spc mask.
       # cor_type: spc-mswc 
@@ -100,7 +104,7 @@ models:
       ## nlam = Number of monochromatic wavelengths sampled within each subband.
       ## null -> use cgisim default (from cgisim_bandpasses.txt).
       ## Only works for SPC modes (spc-wide/band4, spc-spec); HLC/Band 1 is limited to precomputed FPM wavelengths.
-      nlam: 10
+      # nlam: 10
       ######## POLAXIS ########
       ## 10 is the default, includes all polarization aberrations.
       polaxis: 10 
@@ -109,6 +113,6 @@ models:
       ## vmag = Vega magnitude, position_x_mas/position_y_mas are the dRA and dDEC offsets from the host star in mas
       point_sources:
         - vmag: 2.25
-          position_x_mas: 7000.0
+          position_x_mas: 6500.0
           position_y_mas: 0.0
       host_star_enabled: false

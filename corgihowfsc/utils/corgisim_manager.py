@@ -117,6 +117,11 @@ class CorgisimManager:
         # Optional override for the number of monochromatic wavelengths sampled
         # within each subband. None => use cgisim's default (from cgisim_bandpasses.txt).
         self.nlam = self.corgi_overrides.get('nlam', None)
+        # Optional explicit subband letter(s), e.g. 'd' or ['d'], indexed by lind.
+        # None => pick from the default per-band list in _get_bandpass_recipe.
+        self.subband = self.corgi_overrides.get('subband', None)
+        if isinstance(self.subband, str):
+            self.subband = [self.subband]
         self._mode = 'excam'  # default camera mode
         self.k_gain = 8.7 # photo e-/DN, calibrated in TVAC
 
@@ -126,7 +131,9 @@ class CorgisimManager:
         self.base_scene = scene.Scene(self.host_star_properties, point_source_info)
 
     def _get_bandpass_recipe(self, lind):
-        if self.bandpass == '3':
+        if self.subband is not None:
+            subband_option = self.subband
+        elif self.bandpass == '3':
             subband_option = ['a', 'b', 'c', 'd', 'e', 'g'] # band 3 has more subband options, need to update the function to account for this. For now we just default to 'a', 'b', 'c' for all bandpasses but this does not apply to some other bands
         else:
             subband_option = ['a', 'b', 'c']
