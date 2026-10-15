@@ -69,6 +69,9 @@ Two independent tests, plus a replot stage that only reads from disk:
          compact model vs. G.Da -- visualizes linearity/model_fidelity/
          propagation together) and figures/pair_NNNN_NNNN_control_check.png
          (E_i before vs. G-predicted-after -- visualizes the control check).
+         Each figure is written twice: the default log-intensity scale, and
+         a '_linear' suffixed version on a linear intensity scale (same
+         data/normalization either way).
 
   all    check, then run, then plot.
 
@@ -88,9 +91,9 @@ Output layout:
       config.json
       check/    finite_diff.json  finite_diff_table.txt
       run/      iteration_0001/ ...  G.npy  dh_mask.npy
-      figures/  rms_trend.png
-                pair_0001_0002_three_way.png
-                pair_0001_0002_control_check.png
+      figures/  rms_trend.png                       rms_trend_linear.png
+                pair_0001_0002_three_way.png         pair_0001_0002_three_way_linear.png
+                pair_0001_0002_control_check.png     pair_0001_0002_control_check_linear.png
                 ...
 """
 
@@ -170,9 +173,19 @@ class Setup:
     lamc: float
 
 
-def load_setup():
+def load_setup(mode=None, dark_hole=None, dx_mas=None, dy_mas=None):
     """Read default_param.yml, resolve model files, and build the off-axis cfg
-    and baseline DM maps."""
+    and baseline DM maps.
+
+    `mode`/`dark_hole`/`dx_mas`/`dy_mas`: override the corresponding values
+    read from the (possibly since-edited) live default_param.yml. Pass these
+    from a saved run's own config.json (see replot()) so a `plot`/`replot`
+    run always reconstructs the model/separation that was ACTUALLY used to
+    generate that run's saved G/DM-states/fields, regardless of what's
+    currently in the yaml -- otherwise e.g. the Jacobian (loaded from disk,
+    frozen at the real separation) gets compared against a compact model
+    rebuilt at whatever separation the yaml currently happens to have, which
+    silently produces nonsense linearity/model_fidelity numbers."""
     params = loadyaml(PARAM_FILE)
     sim = params['sim_settings']
     model_cfg = params['models'][params['active_model']]
@@ -180,11 +193,18 @@ def load_setup():
 
     overrides = model_cfg.get('corgi_overrides', {}).copy()
     src = overrides['point_sources'][0]
-    dx_mas, dy_mas = src['position_x_mas'], src['position_y_mas']
+    yaml_dx_mas, yaml_dy_mas = src['position_x_mas'], src['position_y_mas']
+    mode = mode if mode is not None else sim['mode']
+    dark_hole = dark_hole if dark_hole is not None else sim['dark_hole']
+    dx_mas = dx_mas if dx_mas is not None else yaml_dx_mas
+    dy_mas = dy_mas if dy_mas is not None else yaml_dy_mas
+    if (dx_mas, dy_mas) != (yaml_dx_mas, yaml_dy_mas):
+        overrides['point_sources'][0]['position_x_mas'] = dx_mas
+        overrides['point_sources'][0]['position_y_mas'] = dy_mas
     default_dmstart = list(model_cfg['dmstartmap_filenames'])
 
     probe_args = get_args(
-        niter=1, mode=sim['mode'], dark_hole=sim['dark_hole'],
+        niter=1, mode=mode, dark_hole=dark_hole,
         probe_shape=sim['probe_shape'], precomp=sim['precomp'],
         dmstartmap_filenames=default_dmstart,
         fileout=os.path.join(OUTPUT_ROOT, 'unused.fits'),
@@ -195,7 +215,7 @@ def load_setup():
     cfg0 = build_offaxis_cfg(CoronagraphMode(cfgfile), dx_mas, dy_mas)
 
     return Setup(
-        mode=sim['mode'], dark_hole=sim['dark_hole'],
+        mode=mode, dark_hole=dark_hole,
         probe_shape=sim['probe_shape'], precomp=sim['precomp'],
         backend_type=model_cfg['backend_type'],
         starting_contrast=float(model_cfg['starting_contrast']),
@@ -731,15 +751,76 @@ def _log_intensity(field, norm):
     return np.log10(np.abs(field) ** 2 / norm + 1e-12)
 
 
-def plot_rms_trend(res, pair_metrics, path):
-    """Dark-hole RMS(|E|) vs iteration, log scale, with the per-pair
-    reduction factor annotated -- the quickest visual check of whether the
-    real loop is actually nulling at this separation."""
+LINEAR_VMAX_PERCENTILE = 95.0
+
+
+def _intensity_arr(field, norm, scale):
+    """Display array for one field: log10(I/norm) for 'log', raw I/norm for
+    'linear' (the norm is the same reference either way; only vmin/vmax --
+    see _scale_bounds -- differ between the two)."""
+    if scale == 'log':
+        return _log_intensity(field, norm)
+    elif scale == 'linear':
+        return np.abs(field) ** 2 / norm
+    raise ValueError(f"scale must be 'log' or 'linear', got {scale!r}")
+
+
+def _scale_bounds(vectors, norm, scale, vmin_log=-6, linear_percentile=LINEAR_VMAX_PERCENTILE):
+    """(vmin, vmax) shared across all panels in one figure, computed from
+    the dh_mask-restricted complex `vectors` (already meant to be divided
+    by the same `norm`). 'log': fixed vmin_log..0 (current/default
+    behavior). 'linear': 0..a PERCENTILE of the combined normalized
+    intensity, not the true max -- dark-zone intensity spans several
+    decades even within one dark hole, so scaling to the true peak crushes
+    everything else to ~0 on a linear scale. Clipping at a percentile
+    instead saturates only the brightest few pixels and keeps mid/low
+    structure visible, while still sharing one scale across all panels."""
+    if scale == 'log':
+        return vmin_log, 0
+    elif scale == 'linear':
+        combined = np.concatenate([np.abs(v) ** 2 / norm for v in vectors])
+        vmax = float(np.percentile(combined, linear_percentile)) if combined.size else 1.0
+        return 0.0, max(vmax, 1e-12)
+    raise ValueError(f"scale must be 'log' or 'linear', got {scale!r}")
+
+
+def _intensity_cbar_label(scale, norm_label):
+    return f'log10 (I / {norm_label})' if scale == 'log' else f'I / {norm_label}'
+
+
+def _avg_ni(vec):
+    """Average normalized intensity over the dark hole for one
+    dh_mask-restricted complex vector: mean(|vec|^2), with NO division by
+    the pair's own display-scale peak (that 'norm' is for the shared
+    colorbar only -- dividing by it here would report NI relative to this
+    pair's own peak, not the absolute value). This is in the same absolute
+    units as measured_contrast.csv / plot_contrast_comparison()'s
+    monochromatic curve, so it's directly comparable across pairs and
+    against the broadband production number."""
+    return float(np.mean(np.abs(vec) ** 2))
+
+
+def _add_scale_suffix(path, scale):
+    """<dir>/<name>.png -> <dir>/<name>_linear.png for scale='linear';
+    unchanged for scale='log' (keeps the original/default filenames)."""
+    if scale == 'log':
+        return path
+    root, ext = os.path.splitext(path)
+    return f'{root}_{scale}{ext}'
+
+
+def plot_rms_trend(res, pair_metrics, path, scale='log'):
+    """Dark-hole RMS(|E|) vs iteration, with the per-pair reduction factor
+    annotated -- the quickest visual check of whether the real loop is
+    actually nulling at this separation. scale='log' (default) uses a log
+    y-axis; scale='linear' uses a linear one (same data either way)."""
+    path = _add_scale_suffix(path, scale)
     rms = [float(np.sqrt(np.mean(np.abs(e[res.dh_mask]) ** 2))) for e in res.E_list]
     iters = np.arange(1, res.niter + 1)
 
     fig, ax = plt.subplots(figsize=(7, 5))
-    ax.semilogy(iters, rms, 'o-')
+    plot_fn = ax.semilogy if scale == 'log' else ax.plot
+    plot_fn(iters, rms, 'o-')
     for m in pair_metrics:
         i0, i1 = m['iteration_pair']
         ax.annotate(f'{m["reduction"]:.2f}x', xy=(i1, rms[i1 - 1]),
@@ -754,6 +835,60 @@ def plot_rms_trend(res, pair_metrics, path):
     print(f'wrote {path}')
 
 
+def _load_measured_contrast(run_dir):
+    """Read the broadband 'measured_c' column nulling_gitl() itself wrote to
+    <run_dir>/measured_contrast.csv as a side effect of run_real_test()'s
+    production nulling_gitl() call -- this is eval_c(unprobedlist, dhlist,
+    n2clist) over the SAME dh_mask, computed from the real corgisim frames
+    (true flux-weighted sum over all internal sub-wavelength slices, not
+    just the one meas_efield picks)."""
+    path = os.path.join(run_dir, 'measured_contrast.csv')
+    return np.loadtxt(path, skiprows=1)
+
+
+def plot_contrast_comparison(res, path):
+    """Monochromatic vs broadband contrast, same dh_mask, vs iteration.
+
+    'Monochromatic' here is mean(|E|^2) over dh_mask for res.E_list (the
+    PerfectEstimator meas_efield -- a single wavelength slice, see
+    GitlImage.get_efield()), NOT run through n2c. 'Broadband' is the real
+    measured_c nulling_gitl() wrote to measured_contrast.csv (eval_c() over
+    the same dh_mask, from the true polychromatic corgisim frames).
+
+    These are directly comparable with NO extra n2c multiply needed for the
+    wfov_mswc_band3d/band4a modes: n2clistfiles for both resolve to
+    every_mask_config/ones_like_fs.fits, confirmed (on disk) to be exactly
+    1.0 everywhere -- i.e. eval_c's n2c factor is a no-op for these models,
+    so measured_c IS the raw mean normalized intensity in dhlist, nothing
+    more. For a mode with a non-trivial n2c, the monochromatic curve below
+    would need to be multiplied elementwise by that n2c array before the
+    two curves mean the same thing.
+
+    The two curves are NOT expected to match -- that's not the point here.
+    The point is seeing whether the monochromatic (single-wavelength,
+    PerfectEstimator) trend tracks the real broadband trend, or diverges
+    from it (e.g. because the control step is blind to the other 4
+    wavelength slices -- see the chromaticity discussion in this script's
+    header)."""
+    mono = np.array([float(np.mean(np.abs(e[res.dh_mask]) ** 2)) for e in res.E_list])
+    broadband = np.atleast_1d(_load_measured_contrast(res.run_dir))
+
+    fig, ax = plt.subplots(figsize=(7, 5))
+    iters_mono = np.arange(1, len(mono) + 1)
+    iters_broadband = np.arange(1, len(broadband) + 1)
+    ax.semilogy(iters_mono, mono, 'o-', label='monochromatic (this diagnostic, meas_efield)')
+    ax.semilogy(iters_broadband, broadband, 's-', label='broadband (production measured_c)')
+    ax.set_xlabel('iteration')
+    ax.set_ylabel('mean normalized intensity in dark hole')
+    ax.set_title(f'Monochromatic vs broadband contrast -- ({res.dx_mas}, {res.dy_mas}) mas')
+    ax.legend(loc='best')
+    ax.grid(True, which='both', alpha=0.3)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fig.savefig(path, dpi=120)
+    plt.close(fig)
+    print(f'wrote {path}')
+
+
 def _dh_zoom_limits(dh_mask, pad=5):
     rr, cc = np.where(dh_mask)
     r0, r1 = max(rr.min() - pad, 0), min(rr.max() + pad, dh_mask.shape[0] - 1)
@@ -761,58 +896,137 @@ def _dh_zoom_limits(dh_mask, pad=5):
     return r0, r1, c0, c1
 
 
-def plot_three_way_pair_diagnostic(res, i, metrics, delta_vec, dE_compact, path, vmin=-6):
-    """Three-way field-CHANGE comparison for one consecutive iteration pair,
-    each restricted to the dark hole and shown on its own-peak log-intensity
-    scale:
+def compute_pair_fields(setup, res, i, delta_vec):
+    """All dh_mask-restricted field vectors needed by BOTH
+    plot_three_way_pair_diagnostic and plot_control_check for one
+    consecutive iteration pair, computed once so both plots can share one
+    normalization and one linear-scale vmax (see _scale_bounds) instead of
+    each picking its own. 'e_g' (G-predicted after) is the exact same
+    quantity as check_control_real's 'e_after' -- one name here since both
+    plots show it.
 
-      1. corgisim (ground truth):   E_{i+1} - E_i, the real measurement
-      2. compact model (nonlinear): compact_model_dE() for the same real
-         delta_vec -- panel 1 vs 2 is check_model_fidelity_real (isolates
-         compact-model-vs-corgisim fidelity, no G involved)
-      3. G . delta_vec (linear):    the Jacobian's linear prediction --
-         panel 2 vs 3 is check_linearity_real (isolates G's linearization
-         error from the compact model); panel 1 vs 3 is
-         check_propagation_real (the end-to-end total, ~ 2-vs-3 + 1-vs-2)
-    """
+    Two different versions of "the compact model's E_{i+1}" are both kept,
+    since they answer different questions:
+    - 'e_ip1_compact_raw' = compact_efield(D_ip1) directly, using the SAME
+      real D_ip1 the production control law actually applied. This is the
+      compact model's own, fully self-consistent prediction -- anchored to
+      its OWN absolute baseline compact_efield(D_i), which empirically runs
+      ~1.3-1.5x off from the real E_i (a modest, roughly constant gain
+      mismatch, not a huge one). A visible mismatch against corgisim here
+      is the expected, correct rendering of check_model_fidelity_real's
+      already-known failure -- not a bug.
+    - 'e_ip1_compact_grounded' = e_i + dE_compact (the REAL measured
+      starting field + the compact model's predicted CHANGE only). This is
+      exactly the quantity check_model_fidelity_real/check_linearity_real
+      are computed from, put on the real E_i's footing so it's directly,
+      fairly comparable to the other real-E_i-anchored panels."""
     E_i, E_ip1 = res.E_list[i], res.E_list[i + 1]
-    dE_corgisim = (E_ip1 - E_i)[res.dh_mask]
-    dE_lin = res.G.T @ delta_vec
+    dm_i = (res.dm1v_list[i], res.dm2v_list[i])
+    dm_ip1 = (res.dm1v_list[i + 1], res.dm2v_list[i + 1])
+    e_i = E_i[res.dh_mask]
+    e_ip1_corgisim = E_ip1[res.dh_mask]
+    dE_compact = compact_model_dE(setup, dm_i, dm_ip1, res.dh_mask)
+    e_ip1_compact_raw = compact_efield(setup.cfg0, [dm_ip1[0], dm_ip1[1]], 0)[res.dh_mask]
+    e_ip1_compact_grounded = e_i + dE_compact
+    e_g = e_i + res.G.T @ delta_vec
+    return {
+        'e_i': e_i, 'e_ip1_corgisim': e_ip1_corgisim,
+        'e_ip1_compact_raw': e_ip1_compact_raw,
+        'e_ip1_compact_grounded': e_ip1_compact_grounded, 'e_g': e_g,
+    }
+
+
+def plot_three_way_pair_diagnostic(setup, res, i, metrics, delta_vec, path, scale='log',
+                                   vmin_log=-6, fields=None, bounds=None):
+    """2x2 ABSOLUTE field comparison for one consecutive iteration pair --
+    shows whether the field actually ended up brighter or dimmer after the
+    real correction, not just the shape of the change (which `rel_err`
+    already captures numerically). All four panels share ONE normalization
+    (E_i's own peak, the real pre-correction field) so actual improvement/
+    worsening is visually comparable across panels, same convention
+    plot_control_check() uses:
+
+      top-left (corgisim, truth):       E_{i+1}, the real measurement
+         after the real correction was applied
+      top-right (G-predicted):          E_i + G . delta_vec (real starting
+         field + G's predicted correction -- exactly check_control_real's
+         e_after). top-left vs top-right is check_propagation_real in
+         absolute-field terms.
+      bottom-left (compact model, self-consistent): compact_efield(D_i+1)
+         directly, using the SAME real D_i+1 the control law applied --
+         the compact model's own, undoctored prediction, anchored to its
+         OWN absolute baseline compact_efield(D_i) (empirically ~1.3-1.5x
+         off from the real E_i -- a modest, roughly constant gain, not
+         wildly different). A visible mismatch against the top-left panel
+         here is the expected, correct picture of check_model_fidelity_real's
+         already-known failure, not a bug.
+      bottom-right (compact model, grounded): E_i + dE_compact (real
+         starting field + the compact model's own nonlinear predicted
+         CHANGE only, i.e. compact_model_dE()) -- put on the real E_i's
+         footing so it's directly comparable to the other real-E_i-anchored
+         panels. top-left vs bottom-right is check_model_fidelity_real;
+         top-right vs bottom-right is check_linearity_real (both share the
+         e_i baseline, so their difference is exactly G.delta_vec vs
+         dE_compact).
+
+    `fields`/`bounds`: pass these (from compute_pair_fields()/_scale_bounds()
+    over the POOLED fields of this pair) to put this plot's color scale on
+    the exact same footing as plot_control_check()'s for the same pair --
+    see replot(). If omitted, both are computed from this plot's own four
+    panels only (standalone use, e.g. from a notebook)."""
+    if fields is None:
+        fields = compute_pair_fields(setup, res, i, delta_vec)
+    E_i = res.E_list[i]
+    e_i_dh = fields['e_i']
+    e_ip1_corgisim = fields['e_ip1_corgisim']
+    e_ip1_compact_raw = fields['e_ip1_compact_raw']
+    e_ip1_compact_grounded = fields['e_ip1_compact_grounded']
+    e_g = fields['e_g']
 
     def to_map(vec):
         m = np.zeros(E_i.shape, dtype=complex)
         m[res.dh_mask] = vec
         return m
 
-    maps = [to_map(dE_corgisim), to_map(dE_compact), to_map(dE_lin)]
-    titles = [
-        rf'corgisim (truth): $|E_{{{i+2}}}-E_{{{i+1}}}|^2$',
-        r'compact model (nonlinear): $|\Delta E_{\mathrm{compact}}|^2$',
-        r'$G\,\Delta a$ (linear): $|G\,\Delta a|^2$',
+    norm = np.abs(e_i_dh).max() ** 2
+    panels = [
+        (e_ip1_corgisim, rf'corgisim (truth): $|E_{{{i+2}}}|^2$'),
+        (e_g, r'G-predicted: $|E_i + G\,\Delta a|^2$'),
+        (e_ip1_compact_raw, r'compact model (self-consistent): $|E_{\mathrm{compact}}(D_{i+1})|^2$'),
+        (e_ip1_compact_grounded, r'compact model (grounded): $|E_i + \Delta E_{\mathrm{compact}}|^2$'),
     ]
 
     outside = ~res.dh_mask
     r0, r1, c0, c1 = _dh_zoom_limits(res.dh_mask)
+    # shared scale across all four panels, normalized to the real
+    # pre-correction field E_i's own peak -- 'log': a panel at 0 dB matches
+    # E_i (no improvement), further below is real suppression. 'linear':
+    # a panel at the percentile-based vmax (see _scale_bounds) matches E_i.
+    path = _add_scale_suffix(path, scale)
+    if bounds is None:
+        vmin, vmax = _scale_bounds([v for v, _ in panels], norm, scale, vmin_log)
+    else:
+        vmin, vmax = bounds
 
-    fig, axes = plt.subplots(1, 3, figsize=(16, 5), constrained_layout=True)
-    for ax, field, title in zip(axes, maps, titles):
-        peak = np.abs(field).max() ** 2
-        disp = np.ma.masked_where(outside, _log_intensity(field, peak))
-        im = ax.imshow(disp, origin='lower', vmin=vmin, vmax=0)
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10), constrained_layout=True)
+    for ax, (vec, title) in zip(axes.flat, panels):
+        arr = _intensity_arr(to_map(vec), norm, scale)
+        disp = np.ma.masked_where(outside, arr)
+        im = ax.imshow(disp, origin='lower', vmin=vmin, vmax=vmax)
         ax.contour(res.dh_mask, levels=[0.5], colors='red', linewidths=1)
         ax.set_xlim(c0, c1)
         ax.set_ylim(r0, r1)
         _set_lod_ticks(ax, res.dh_mask.shape, res.pixperlod)
-        ax.set_title(f'{title}\npeak = {peak:.2e}')
-        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label='log10 (I / own peak)')
+        ax.set_title(f'{title}\navg NI (DH) = {_avg_ni(vec):.2e}')
+        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04,
+                     label=_intensity_cbar_label(scale, '||E_i||_peak'))
 
     lin, fid, prop = metrics['linearity'], metrics['model_fidelity'], metrics['propagation']
     fig.suptitle(
-        f'iteration {i + 1} -> {i + 2}:   '
-        f'model fidelity (1 vs 2) rel_err={fid["rel_err"]:.3f}   |   '
-        f'linearity (2 vs 3) rel_err={lin["rel_err"]:.3f}   |   '
-        f'propagation (1 vs 3) rel_err={prop["rel_err"]:.3f} (tol {prop["tol"]}) '
-        f'{"PASS" if prop["pass"] else "FAIL"}'
+        f'iteration {i + 1} -> {i + 2}:  reduction={metrics["reduction"]:.2f}x   |   '
+        f'model fidelity (truth vs compact-grounded) rel_err={fid["rel_err"]:.3f} \n  |   '
+        f'linearity (G-predicted vs compact-grounded) rel_err={lin["rel_err"]:.3f}   |   '
+        f'propagation (truth vs G-predicted) rel_err={prop["rel_err"]:.3f}'
     )
     os.makedirs(os.path.dirname(path), exist_ok=True)
     fig.savefig(path, dpi=120)
@@ -820,27 +1034,36 @@ def plot_three_way_pair_diagnostic(res, i, metrics, delta_vec, dE_compact, path,
     print(f'wrote {path}')
 
 
-def plot_control_check(res, i, metrics, delta_vec, path, vmin=-6):
+def plot_control_check(res, i, metrics, delta_vec, path, scale='log', vmin_log=-6,
+                       fields=None, bounds=None):
     """Visualizes the control check: the real measured field E_i (before
     correction) next to G's own linear prediction of the corrected field,
     E_i + G.delta_vec. The second panel is NOT a real measurement -- it is
     purely what G itself believes the real correction does. A large drop
     from panel 1 to panel 2 means the control law's solve is self-consistent
     GIVEN this G; it says nothing about whether G matches corgisim (that's
-    plot_three_way_pair_diagnostic)."""
+    plot_three_way_pair_diagnostic).
+
+    `fields`/`bounds`: pass these (from compute_pair_fields()/_scale_bounds()
+    over the POOLED fields of this pair) to put E_i here on the exact same
+    color scale as the E_{i+1}-ish panels in plot_three_way_pair_diagnostic()
+    for the same pair -- see replot(). If omitted, both are computed from
+    this plot's own two panels only (standalone use)."""
     E_i = res.E_list[i]
-    e0 = E_i[res.dh_mask]
-    e_after = e0 + res.G.T @ delta_vec
+    if fields is None:
+        e0 = E_i[res.dh_mask]
+        e_after = e0 + res.G.T @ delta_vec
+    else:
+        e0, e_after = fields['e_i'], fields['e_g']
 
     def to_map(vec):
         m = np.zeros(E_i.shape, dtype=complex)
         m[res.dh_mask] = vec
         return m
 
-    maps = [to_map(e0), to_map(e_after)]
-    titles = [
-        r'before: $|E_i|^2$ (real measurement)',
-        r'G-predicted after: $|E_i + G\,\Delta a|^2$ (NOT a real measurement)',
+    panels = [
+        (e0, r'before: $|E_i|^2$ (real measurement)'),
+        (e_after, r'G-predicted after: $|E_i + G\,\Delta a|^2$ (NOT a real measurement)'),
     ]
 
     outside = ~res.dh_mask
@@ -848,17 +1071,24 @@ def plot_control_check(res, i, metrics, delta_vec, path, vmin=-6):
     # shared scale, normalized to the "before" peak, so the drop (or lack of
     # one) between panels is visible
     norm = np.abs(e0).max() ** 2
+    path = _add_scale_suffix(path, scale)
+    if bounds is None:
+        vmin, vmax = _scale_bounds([e0, e_after], norm, scale, vmin_log)
+    else:
+        vmin, vmax = bounds
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 5), constrained_layout=True)
-    for ax, field, title in zip(axes, maps, titles):
-        disp = np.ma.masked_where(outside, _log_intensity(field, norm))
-        im = ax.imshow(disp, origin='lower', vmin=vmin, vmax=0)
+    for ax, (vec, title) in zip(axes, panels):
+        arr = _intensity_arr(to_map(vec), norm, scale)
+        disp = np.ma.masked_where(outside, arr)
+        im = ax.imshow(disp, origin='lower', vmin=vmin, vmax=vmax)
         ax.contour(res.dh_mask, levels=[0.5], colors='red', linewidths=1)
         ax.set_xlim(c0, c1)
         ax.set_ylim(r0, r1)
         _set_lod_ticks(ax, res.dh_mask.shape, res.pixperlod)
-        ax.set_title(title)
-        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label='log10 (I / ||E_i||_peak)')
+        ax.set_title(f'{title}\navg NI (DH) = {_avg_ni(vec):.2e}')
+        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04,
+                     label=_intensity_cbar_label(scale, '||E_i||_peak'))
 
     ctrl = metrics['control']
     fig.suptitle(f'iteration {i + 1} control check: '
@@ -873,21 +1103,40 @@ def plot_control_check(res, i, metrics, delta_vec, path, vmin=-6):
 def replot(out_dir, tol_relerr=TOL_STEP2_RELERR):
     """Stage 3: regenerate metrics + figures purely from files in out_dir.
     Returns the pair_metrics list."""
-    setup = load_setup()
+    # Reconstruct setup from THIS run's own saved config.json, not whatever
+    # default_param.yml currently says (it may have since been edited to a
+    # different separation/mode for a later run) -- see load_setup()'s
+    # docstring for why that mismatch silently produces garbage metrics.
+    run_config = _read_json(os.path.join(out_dir, 'config.json'))
+    setup = load_setup(mode=run_config.get('mode'), dark_hole=run_config.get('dark_hole'),
+                       dx_mas=run_config.get('dx_mas'), dy_mas=run_config.get('dy_mas'))
     res = load_real_run_results(out_dir)
     pair_metrics, delta_vecs, dE_compacts = analyze_real_run(setup, res, tol_relerr)
     _write_json(os.path.join(res.run_dir, 'metrics.json'), pair_metrics)
 
     fig_dir = os.path.join(out_dir, 'figures')
-    plot_rms_trend(res, pair_metrics, os.path.join(fig_dir, 'rms_trend.png'))
-    for i, (m, dv, dc) in enumerate(zip(pair_metrics, delta_vecs, dE_compacts)):
+    for scale in ('log', 'linear'):
+        plot_rms_trend(res, pair_metrics, os.path.join(fig_dir, 'rms_trend.png'), scale=scale)
+    plot_contrast_comparison(res, os.path.join(fig_dir, 'mono_vs_broadband_contrast.png'))
+    for i, (m, dv) in enumerate(zip(pair_metrics, delta_vecs)):
         i0, i1 = m['iteration_pair']
-        plot_three_way_pair_diagnostic(
-            res, i, m, dv, dc,
-            os.path.join(fig_dir, f'pair_{i0:04d}_{i1:04d}_three_way.png'))
-        plot_control_check(
-            res, i, m, dv,
-            os.path.join(fig_dir, f'pair_{i0:04d}_{i1:04d}_control_check.png'))
+        # Computed once per pair (independent of scale) and shared between
+        # three_way's and control_check's plots so E_i ("E1") and the
+        # E_{i+1}-ish panels ("E2") end up on the exact same color scale.
+        fields = compute_pair_fields(setup, res, i, dv)
+        norm = np.abs(fields['e_i']).max() ** 2
+        pooled = [fields['e_i'], fields['e_ip1_corgisim'], fields['e_ip1_compact_raw'],
+                 fields['e_ip1_compact_grounded'], fields['e_g']]
+        for scale in ('log', 'linear'):
+            bounds = _scale_bounds(pooled, norm, scale)
+            plot_three_way_pair_diagnostic(
+                setup, res, i, m, dv,
+                os.path.join(fig_dir, f'pair_{i0:04d}_{i1:04d}_three_way.png'),
+                scale=scale, fields=fields, bounds=bounds)
+            plot_control_check(
+                res, i, m, dv,
+                os.path.join(fig_dir, f'pair_{i0:04d}_{i1:04d}_control_check.png'),
+                scale=scale, fields=fields, bounds=bounds)
 
     fd_json = os.path.join(out_dir, 'check', 'finite_diff.json')
     if os.path.exists(fd_json):
