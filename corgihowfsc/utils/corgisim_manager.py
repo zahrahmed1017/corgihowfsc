@@ -160,6 +160,11 @@ class CorgisimManager:
         the existing endpoints with a new count preserves the band exactly while
         increasing the spectral resolution of the propagated PSF.
 
+        ``nlam == 1`` gives a monochromatic propagation at the subband center. The
+        full subband width is stored as ``optics.mono_bandwidth_um`` so corgisim's
+        photometry still integrates over the whole band (requires the
+        ``CorgiOptics._dlam_um`` helper in corgisim).
+
         This does nothing if no override was requested (``self.nlam is None``).
 
         Parameters
@@ -170,8 +175,16 @@ class CorgisimManager:
         if self.nlam is None:
             return
 
-        if int(self.nlam) < 2:
-            raise ValueError(f"nlam override must be >= 2, got {self.nlam}")
+        if int(self.nlam) < 1:
+            raise ValueError(f"nlam override must be >= 1, got {self.nlam}")
+
+        if int(self.nlam) == 1:
+            if not hasattr(optics, '_dlam_um'):
+                raise RuntimeError("nlam=1 requires corgisim's CorgiOptics._dlam_um helper")
+            optics.mono_bandwidth_um = optics.lam_um[-1] - optics.lam_um[0]
+            optics.lam_um = np.array([0.5 * (optics.lam_um[0] + optics.lam_um[-1])])
+            optics.nlam = 1
+            return
 
         optics.lam_um = np.linspace(optics.lam_um[0], optics.lam_um[-1], int(self.nlam))
         optics.nlam = int(self.nlam)

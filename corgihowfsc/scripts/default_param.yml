@@ -22,7 +22,7 @@ sim_settings:
   loop_framework: "corgi-howfsc" # do not modify 
   precomp: "precomp_jacs_always" # options: 'precomp_jacs_always', 'precomp_all_once', 'load_all' (only if defjacpath is not None)
   output_every_iter: true # whether to save the output frames at every iteration (true) or after all iterations are done (false)
-  niter: 2 # number of iterations to run
+  niter: 3 # number of iterations to run
   mode: "wfov_mswc_band3d" # options: see models
   dark_hole: "5x5lamD" #"360deg"  # options: see models
   probe_shape: "default" 
@@ -102,9 +102,9 @@ models:
       # field_stop_width_lamD: 9
       ######## NLAM ########
       ## nlam = Number of monochromatic wavelengths sampled within each subband.
-      ## null -> use cgisim default (from cgisim_bandpasses.txt).
+      ## null -> use cgisim default (from cgisim_bandpasses.txt). 1 -> monochromatic at the subband center (needs corgisim _dlam_um patch).
       ## Only works for SPC modes (spc-wide/band4, spc-spec); HLC/Band 1 is limited to precomputed FPM wavelengths.
-      # nlam: 10
+      nlam: 1
       ######## POLAXIS ########
       ## 10 is the default, includes all polarization aberrations.
       polaxis: 10 
