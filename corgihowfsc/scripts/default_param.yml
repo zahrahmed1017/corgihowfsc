@@ -28,7 +28,7 @@ sim_settings:
   probe_shape: "default" 
 
 paths:
-  base_path: "~" # default to home directory, but user can change to a different path
+  base_path: "/Users/Zahra1/Documents/Stanford/Research/corgi-universe" # default to home directory, but user can change to a different path
   base_corgiloop_path: "corgiloop_data" # this is the proposed default but can be changed
   defjacpath: "temp" # this is the proposed default but can be changed, should be somewhere outside the repo if used
   final_filename: "final_frames.fits" # this is the proposed default but can be changed
@@ -65,7 +65,7 @@ models:
     corgi_overrides:
       point_sources:
           - vmag: 2.25
-            position_x_mas: 7000.0
+            position_x_mas: 0.0
             position_y_mas: 0.0
       host_star_enabled: false
 
@@ -82,7 +82,7 @@ models:
     corgi_overrides: 
       ######## Parameters forwarded to GitlImage initialization #########
       is_noise_free: true
-      use_errors: 1 # use optical error maps in PROPER (0 = false)
+      use_errors: 0 # use optical error maps in PROPER (0 = false)
       oversampling_factor: 3 # always odd number
       bandpass: '3'
       ######## SUBBAND ########
@@ -104,7 +104,7 @@ models:
       ## nlam = Number of monochromatic wavelengths sampled within each subband.
       ## null -> use cgisim default (from cgisim_bandpasses.txt). 1 -> monochromatic at the subband center (needs corgisim _dlam_um patch).
       ## Only works for SPC modes (spc-wide/band4, spc-spec); HLC/Band 1 is limited to precomputed FPM wavelengths.
-      nlam: 1
+      # nlam: 1
       ######## POLAXIS ########
       ## 10 is the default, includes all polarization aberrations.
       polaxis: 10 
