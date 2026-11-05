@@ -8,7 +8,8 @@ clear; clc;
 N_resampled = 300;
 roll_angle = deg2rad(90.0);
 
-orig_spm_path = "C:/Users/zahmed1/Documents/cgisim_cpp/roman_preflight_proper/preflight_data/spc_20200623_mswc/SPM_SPC-20200623_982_rounded9_gray_rotated.fits";
+% orig_spm_path = "C:/Users/zahmed1/Documents/cgisim_cpp/roman_preflight_proper/preflight_data/spc_20200623_mswc/SPM_SPC-20200623_982_rounded9_gray_rotated.fits";
+orig_spm_path = "/Users/Zahra1/Documents/Stanford/Research/corgi-universe/cgisim_cpp/roman_preflight_proper/preflight_data/spc_20200623_mswc/SPM_SPC-20200623_982_rounded9_gray_rotated.fits";
 orig_spm = pupil_generate(orig_spm_path, 1, 'full-grid', 'pixel-centered');
 resampled_spm = ames_resampleRotatePupil(orig_spm_path, N_resampled, roll_angle);
 padded_spm = pad_crop(resampled_spm, 340);
