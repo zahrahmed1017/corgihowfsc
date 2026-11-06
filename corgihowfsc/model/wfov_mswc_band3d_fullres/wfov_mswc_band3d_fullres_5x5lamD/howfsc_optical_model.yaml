@@ -2,13 +2,13 @@ dms:
   DM1:
     pitch: 0.0009906
     registration:
-      dx: -0.005773220757181754
-      dy: -0.051787920052533354
-      inffn: ../../dm1/dm_1236-2_brian_inf_v1.0.fits
+      dx: -0.018968808978845612
+      dy: -0.17015721452643331
+      inffn: ../../dm1/dm_1236-2_brian_inf_v1.0_ppact26.fits
       nact: 48
-      ppact_cx: 6.411760643456628
-      ppact_cy: 6.314957781558646
-      ppact_d: 13
+      ppact_cx: 21.066830453783048
+      ppact_cy: 20.74876969131105
+      ppact_d: 26
       thact: 90.02744242651791
       flipx: true
     voltages:
@@ -25,13 +25,13 @@ dms:
   DM2:
     pitch: 0.0009906
     registration:
-      dx: 0.11326435347310934
-      dy: -0.5875471296628845
-      inffn: ../../dm2/dm_1236-5_brian_inf_v1.0.fits
+      dx: 0.37214753696559894
+      dy: -1.9304768927777585
+      inffn: ../../dm2/dm_1236-5_brian_inf_v1.0_ppact26.fits
       nact: 48
-      ppact_cx: 6.406261698222381
-      ppact_cy: 6.307387705381232
-      ppact_d: 13
+      ppact_cx: 21.048762819420755
+      ppact_cy: 20.723897036166861
+      ppact_d: 26
       thact: 90.00609243710815
       flipx: false
     voltages:
@@ -55,19 +55,19 @@ sls:
     lam: 7.54e-07
     ft_dir: reverse
     sp:
-      afn: ../any/spm_mswc_amp.fits
-      pdp: 296.10504150390625
-      pfn: ../any/subband0/spm_ph.fits
+      afn: ../any/spm_mswc_amp_982.fits
+      pdp: 982
+      pfn: ../any/subband0/spm_ph_982.fits
     lyot:
       afn: ../any/lyot_amp.fits
-      pdp: 296.10504150390625
+      pdp: 298.875
       pfn: ../any/subband0/lyot_ph.fits
       tip: 0.0
       tilt: 0.0
     epup:
-      afn: ../any/epup_amp.fits
-      pdp: 296.10504150390625
-      pfn: ../any/subband0/epup_ph.fits
+      afn: ../any/epup_amp_982.fits
+      pdp: 982
+      pfn: ../any/subband0/epup_ph_982.fits
       tip: 0
       tilt: 0
     fs:
