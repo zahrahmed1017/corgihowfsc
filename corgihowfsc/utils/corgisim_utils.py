@@ -27,7 +27,8 @@ CGI_TO_CORGI_MAPPING = {
     'spec_band3': 'spc-spec_band3',
     'wfov_band4': 'spc-wide',
     'wfov_mswc_band4a': 'spc-mswc',
-    'wfov_mswc_band3d': 'spc-mswc'
+    'wfov_mswc_band3d': 'spc-mswc',
+    'wfov_mswc_band3d_fullres': 'spc-mswc'
 }
 
 SUPPORTED_CGI_MODES = list(CGI_TO_CORGI_MAPPING.keys())
